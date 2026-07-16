@@ -17,6 +17,7 @@
   "dependencies": {
     "@warehouse/api-client": "0.1.0",
     "@warehouse/domain": "0.1.0",
+    "@warehouse/rendering-2d": "0.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

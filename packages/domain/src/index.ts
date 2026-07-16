@@ -32,3 +32,16 @@ export type {
   RackFootprint,
   WarehouseMap,
 } from "./warehouse-map.js";
+
+export {
+  StorageLocationValidationError,
+  buildStorageHierarchy,
+} from "./storage-location.js";
+
+export type {
+  StorageAisle,
+  StorageBay,
+  StorageHierarchy,
+  StorageLevel,
+  StorageLocation,
+} from "./storage-location.js";

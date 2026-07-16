@@ -6,3 +6,8 @@ export {
 } from "./warehouse-graph-api.js";
 
 export type { FetchGraph } from "./warehouse-graph-api.js";
+
+export {
+  WarehouseLocationsApiClient,
+  mapWarehouseLocationsResponse,
+} from "./warehouse-locations-api.js";
