@@ -1,0 +1,17 @@
+node_modules/
+dist/
+dist-electron/
+dist-types/
+release/
+coverage/
+*.tsbuildinfo
+*.log
+
+.env
+.env.*
+!.env.example
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

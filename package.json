@@ -1,0 +1,26 @@
+{
+  "name": "warehouse-graph-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop warehouse layout editor and simulation workspace",
+  "packageManager": "npm@10.9.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @warehouse/desktop",
+    "package:win": "npm run package:win --workspace @warehouse/desktop",
+    "test": "npm run build --workspace @warehouse/domain && npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
