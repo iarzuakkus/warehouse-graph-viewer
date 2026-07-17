@@ -111,6 +111,39 @@
   font-size: 11px;
 }
 
+.rack-capacity { padding-top: 15px; }
+
+.capacity-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.capacity-heading h4 { margin: 0; }
+.capacity-heading strong { color: var(--accent); font-size: 11px; }
+
+.utilization-track {
+  height: 6px;
+  margin-bottom: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf0f6;
+}
+
+.utilization-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+  transition: width 180ms ease;
+}
+
+.utilization-track span[data-tone="medium"] { background: var(--warning); }
+.utilization-track span[data-tone="high"] { background: var(--danger); }
+.utilization-track span[data-tone="unknown"] { background: #aab2c2; }
+.capacity-values div { padding-block: 3px; }
+
 .property-list { margin: 0; }
 
 .property-list div {
@@ -142,6 +175,26 @@
   border-radius: 9px;
   background: #fbfcfe;
 }
+
+.rack-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.rack-summary-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #edf0f5;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.rack-summary-grid span { color: var(--muted); font-size: 7px; }
+.rack-summary-grid strong { font-size: 10px; }
 
 .level-list {
   display: flex;
@@ -193,6 +246,17 @@
   gap: 8px;
 }
 
+.slot-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.slot-heading small {
+  color: var(--muted);
+  font-size: 7px;
+}
+
 .slot-card strong { color: #334f8e; font-size: 10px; }
 
 .slot-state {
@@ -223,6 +287,131 @@
   margin: 0;
   color: #7a869a;
   font-size: 8px;
+}
+
+.location-inventory {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 7px;
+  border-top: 1px solid #e4eaf4;
+}
+
+.inventory-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inventory-heading strong { color: #42506a; font-size: 8px; }
+
+.inventory-heading > span {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.empty-inventory {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  background: #f7f8fb;
+  font-size: 8px;
+  text-align: center;
+}
+
+.carton-card {
+  padding: 8px;
+  border: 1px solid #e1e6ef;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.carton-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.carton-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.carton-heading strong {
+  overflow: hidden;
+  color: #283650;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.carton-heading div span { color: var(--muted); font-size: 7px; }
+
+.carton-status {
+  flex: 0 0 auto;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: #07894b;
+  background: #e6f8ef;
+  font-size: 6px;
+  font-weight: 700;
+}
+
+.carton-status[data-status="reserved"] { color: #9a6700; background: #fff4d6; }
+.carton-status[data-status="depleted"] { color: #657188; background: #edf0f5; }
+.carton-status[data-status="quarantined"] { color: #bd3e49; background: #fde9eb; }
+
+.quantity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.quantity-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 5px 3px;
+  border-radius: 5px;
+  background: #f6f7fa;
+  text-align: center;
+}
+
+.quantity-grid span { color: var(--muted); font-size: 6px; }
+.quantity-grid strong { color: #34415a; font-size: 8px; }
+
+.carton-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 7px;
+  color: #7d899d;
+  font-size: 6px;
+}
+
+.carton-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.expiry-date {
+  margin: 6px 0 0;
+  color: #b25c20;
+  font-size: 7px;
 }
 
 .slot-properties dd {

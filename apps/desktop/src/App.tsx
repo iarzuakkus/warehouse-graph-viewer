@@ -1,11 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react";
 
-import {
-  buildStorageHierarchy,
-  filterStorageHierarchy,
-  type WarehouseRackDetail,
-} from "@warehouse/domain";
+import { filterStorageHierarchy } from "@warehouse/domain";
 
+import { RackDetailsPanel } from "./components/RackDetailsPanel.js";
 import { sampleWarehouseMap } from "./sample-map.js";
 import {
   useWarehouseLocations,
@@ -260,90 +257,7 @@ function RackDetailContent({ state }: { readonly state: WarehouseRackDetailState
   if (state.status === "error") {
     return <div className="detail-message error"><strong>Raf detayı alınamadı</strong><p>{state.message}</p></div>;
   }
-  return <BayDetails detail={state.detail} />;
-}
-
-function BayDetails({ detail }: { readonly detail: WarehouseRackDetail }) {
-  const hierarchy = buildStorageHierarchy(detail.locations);
-  const bay = hierarchy.aisles[0]?.bays[0];
-  if (bay === undefined) return <EmptySelection />;
-
-  const aisleCode = displayWarehouseCode(detail.aisle);
-  const locations = bay.levels.flatMap((level) => level.locations);
-  const activeCount = detail.activeLocationCount;
-  const totalCapacity = locations.reduce(
-    (sum, location) => sum + (location.maxWeightKg ?? 0),
-    0,
-  );
-  const averageDistance = locations.length === 0
-    ? 0
-    : locations.reduce(
-      (sum, location) => sum + location.distanceFromDispatchM,
-      0,
-    ) / locations.length;
-  const allActive = activeCount === locations.length;
-
-  return (
-    <div className="bay-details">
-      <section className="detail-section">
-        <div className="section-label-row">
-          <span>Lokasyon Detayı</span>
-          <span className={allActive ? "state-badge active" : "state-badge partial"}>
-            {allActive ? "Aktif" : "Kısmi"}
-          </span>
-        </div>
-        <h3>{aisleCode} - {bay.code}</h3>
-        <p>Raf: {bay.code} · Seviye: {bay.levels.length} · Lokasyon: {locations.length}</p>
-      </section>
-
-      <section className="detail-section">
-        <h4>Raf Bilgisi</h4>
-        <dl className="property-list">
-          <div><dt>Koridor</dt><dd>{aisleCode}</dd></div>
-          <div><dt>Raf</dt><dd>{bay.code}</dd></div>
-          <div><dt>Toplam kapasite</dt><dd>{formatNumber(totalCapacity)} kg</dd></div>
-          <div><dt>Ort. sevkiyat uzaklığı</dt><dd>{averageDistance.toFixed(1)} m</dd></div>
-        </dl>
-      </section>
-
-      <section className="location-summary">
-        <h4>Lokasyon Özeti</h4>
-        <dl className="property-list">
-          <div><dt>Seviye</dt><dd>{bay.levels.length}</dd></div>
-          <div><dt>Aktif lokasyon</dt><dd>{activeCount} / {locations.length}</dd></div>
-          <div><dt>Durum</dt><dd className={allActive ? "text-active" : "text-partial"}>{allActive ? "Aktif" : "Kısmi"}</dd></div>
-        </dl>
-      </section>
-
-      <div className="level-list">
-        {bay.levels.map((level) => (
-          <details className="level-card" key={level.code}>
-            <summary>{level.code}<span>{level.locations.length} lokasyon</span></summary>
-            <div className="slot-list">
-              {level.locations.map((location) => (
-                <article className="slot-card" data-active={location.isActive} key={location.id}>
-                  <div className="slot-heading">
-                    <strong>{location.slot}</strong>
-                    <span className={location.isActive ? "slot-state active" : "slot-state inactive"}>
-                      {location.isActive ? "Aktif" : "Pasif"}
-                    </span>
-                  </div>
-                  <dl className="slot-properties">
-                    <div><dt>Lokasyon ID</dt><dd>{location.id}</dd></div>
-                    <div>
-                      <dt>Kapasite</dt>
-                      <dd>{location.maxWeightKg === null ? "Belirtilmemiş" : `${formatNumber(location.maxWeightKg)} kg`}</dd>
-                    </div>
-                    <div><dt>Sevkiyat uzaklığı</dt><dd>{formatNumber(location.distanceFromDispatchM)} m</dd></div>
-                  </dl>
-                </article>
-              ))}
-            </div>
-          </details>
-        ))}
-      </div>
-    </div>
-  );
+  return <RackDetailsPanel detail={state.detail} />;
 }
 
 function EmptySelection() {
@@ -420,8 +334,4 @@ function valueOf(value: number | undefined): string {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 }).format(value);
-}
-
-function displayWarehouseCode(code: string): string {
-  return code.replace(/^SYN-/i, "");
 }

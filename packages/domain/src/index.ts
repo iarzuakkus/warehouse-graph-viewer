@@ -45,5 +45,10 @@ export type {
   StorageHierarchy,
   StorageLevel,
   StorageLocation,
+  WarehouseCartonStatus,
+  WarehouseRackCarton,
   WarehouseRackDetail,
+  WarehouseRackLocationDetail,
+  WarehouseRackPackaging,
+  WarehouseRackProduct,
 } from "./storage-location.js";

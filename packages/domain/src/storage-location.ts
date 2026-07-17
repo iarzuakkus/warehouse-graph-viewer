@@ -32,9 +32,55 @@ export interface StorageHierarchy {
 export interface WarehouseRackDetail {
   readonly aisle: string;
   readonly bay: string;
+  readonly levelCount: number;
   readonly locationCount: number;
   readonly activeLocationCount: number;
-  readonly locations: readonly StorageLocation[];
+  readonly cartonCount: number;
+  readonly productCount: number;
+  readonly totalMaxWeightKg: number | null;
+  readonly totalUsedWeightKg: number | null;
+  readonly weightUtilizationPercent: number | null;
+  readonly locations: readonly WarehouseRackLocationDetail[];
+}
+
+export type WarehouseCartonStatus =
+  | "available"
+  | "reserved"
+  | "depleted"
+  | "quarantined";
+
+export interface WarehouseRackProduct {
+  readonly id: number;
+  readonly sku: string;
+  readonly name: string;
+  readonly unitWeightKg: number | null;
+}
+
+export interface WarehouseRackPackaging {
+  readonly id: number;
+  readonly unitsPerCarton: number;
+  readonly cartonTypeCode: string;
+}
+
+export interface WarehouseRackCarton {
+  readonly id: number;
+  readonly cartonNumber: string;
+  readonly status: WarehouseCartonStatus;
+  readonly capacityQty: number;
+  readonly currentQty: number;
+  readonly reservedQty: number;
+  readonly availableQty: number;
+  readonly expiresAt: string | null;
+  readonly product: WarehouseRackProduct;
+  readonly packaging: WarehouseRackPackaging;
+}
+
+export interface WarehouseRackLocationDetail extends StorageLocation {
+  readonly usedWeightKg: number | null;
+  readonly weightUtilizationPercent: number | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly cartons: readonly WarehouseRackCarton[];
 }
 
 export class StorageLocationValidationError extends Error {

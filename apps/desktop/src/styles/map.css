@@ -1,6 +1,6 @@
 .map-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 286px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 14px;
   min-height: 650px;
   height: calc(100vh - 192px);

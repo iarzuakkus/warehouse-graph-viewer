@@ -6,7 +6,7 @@
     padding: 10px;
   }
   .summary-card small { display: none; }
-  .map-workspace { grid-template-columns: minmax(0, 1fr) 250px; }
+  .map-workspace { grid-template-columns: minmax(0, 1fr) 285px; }
 }
 
 @media (max-width: 980px) {
@@ -28,7 +28,7 @@
     grid-template-columns: repeat(3, minmax(130px, 1fr));
   }
   .map-workspace {
-    grid-template-columns: minmax(0, 1fr) 240px;
+    grid-template-columns: minmax(0, 1fr) 270px;
   }
 }
 
