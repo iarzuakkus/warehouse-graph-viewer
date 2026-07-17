@@ -21,6 +21,9 @@ export {
 
 export type { WorldBounds } from "./graph-viewport.js";
 
+export { getRackOccupancyState } from "./rack-occupancy.js";
+export type { RackOccupancyState } from "./rack-occupancy.js";
+
 export {
   createStorageSchematic,
   findStorageBayAtPoint,

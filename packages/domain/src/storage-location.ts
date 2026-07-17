@@ -29,7 +29,7 @@ export interface StorageHierarchy {
   readonly locationCount: number;
 }
 
-export interface WarehouseRackDetail {
+export interface WarehouseRackSummary {
   readonly aisle: string;
   readonly bay: string;
   readonly levelCount: number;
@@ -40,6 +40,9 @@ export interface WarehouseRackDetail {
   readonly totalMaxWeightKg: number | null;
   readonly totalUsedWeightKg: number | null;
   readonly weightUtilizationPercent: number | null;
+}
+
+export interface WarehouseRackDetail extends WarehouseRackSummary {
   readonly locations: readonly WarehouseRackLocationDetail[];
 }
 

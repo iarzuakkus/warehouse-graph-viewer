@@ -51,4 +51,5 @@ export type {
   WarehouseRackLocationDetail,
   WarehouseRackPackaging,
   WarehouseRackProduct,
+  WarehouseRackSummary,
 } from "./storage-location.js";

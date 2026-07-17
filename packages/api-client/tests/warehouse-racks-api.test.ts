@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   WarehouseRacksApiClient,
+  mapWarehouseRackSummariesResponse,
   mapWarehouseRackResponse,
   type FetchGraph,
 } from "../src/index.js";
@@ -134,5 +135,43 @@ describe("WarehouseRacksApiClient", () => {
     expect(fetchRack).toHaveBeenCalledWith(
       "/api/warehouse-racks/SYN%20A003/B%2F001",
     );
+  });
+
+  it("loads every rack summary page", async () => {
+    const fetchRack = vi
+      .fn<FetchGraph>()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [rackResponse, { ...rackResponse, bay: "B002" }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [{ ...rackResponse, bay: "B003" }],
+      });
+    const client = new WarehouseRacksApiClient("/api", fetchRack);
+
+    const summaries = await client.getAllRackSummaries(2);
+
+    expect(summaries.map((summary) => summary.bay)).toEqual([
+      "B001",
+      "B002",
+      "B003",
+    ]);
+    expect(fetchRack).toHaveBeenNthCalledWith(
+      2,
+      "/api/warehouse-racks?offset=2&limit=2",
+    );
+  });
+});
+
+describe("mapWarehouseRackSummariesResponse", () => {
+  it("maps lightweight summaries without location details", () => {
+    const [{ weightUtilizationPercent, cartonCount } = {}] =
+      mapWarehouseRackSummariesResponse([rackResponse]);
+
+    expect(weightUtilizationPercent).toBe(58.33);
+    expect(cartonCount).toBe(1);
   });
 });

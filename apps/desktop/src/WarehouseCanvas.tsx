@@ -10,23 +10,27 @@ import type {
   Rack,
   StorageHierarchy,
   WarehouseMap,
+  WarehouseRackSummary,
 } from "@warehouse/domain";
 import {
   createNavigatedViewportTransform,
   createStorageSchematic,
   createViewportTransform,
   findStorageBayAtPoint,
+  getRackOccupancyState,
   rackToScreenRect,
   screenToWorld,
   worldToScreen,
   type ScreenPan,
   type StorageBayBlock,
+  type RackOccupancyState,
   type ViewportTransform,
 } from "@warehouse/rendering-2d";
 
 interface WarehouseCanvasProps {
   readonly map: WarehouseMap;
   readonly hierarchy: StorageHierarchy | null;
+  readonly rackSummaries: readonly WarehouseRackSummary[];
   readonly selectedBayKey: string | null;
   readonly onBaySelect: (aisleCode: string, bayCode: string) => void;
 }
@@ -52,6 +56,7 @@ const DEFAULT_VIEW: ViewState = { zoom: 1, pan: { x: 0, y: 0 } };
 export function WarehouseCanvas({
   map,
   hierarchy,
+  rackSummaries,
   selectedBayKey,
   onBaySelect,
 }: WarehouseCanvasProps) {
@@ -71,13 +76,21 @@ export function WarehouseCanvas({
     if (container === null || canvas === null) return;
 
     const draw = () =>
-      drawContent(canvas, container, map, hierarchy, selectedBayKey, view);
+      drawContent(
+        canvas,
+        container,
+        map,
+        hierarchy,
+        rackSummaries,
+        selectedBayKey,
+        view,
+      );
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(container);
     draw();
 
     return () => resizeObserver.disconnect();
-  }, [hierarchy, map, selectedBayKey, view]);
+  }, [hierarchy, map, rackSummaries, selectedBayKey, view]);
 
   const changeZoom = (factor: number): void => {
     setView((current) => ({
@@ -210,6 +223,7 @@ function drawContent(
   container: HTMLDivElement,
   map: WarehouseMap,
   hierarchy: StorageHierarchy | null,
+  rackSummaries: readonly WarehouseRackSummary[],
   selectedBayKey: string | null,
   view: ViewState,
 ): void {
@@ -237,6 +251,7 @@ function drawContent(
     drawStorageSchematic(
       context,
       hierarchy,
+      rackSummaries,
       bounds.width,
       bounds.height,
       selectedBayKey,
@@ -285,6 +300,7 @@ function getSchematicTransform(
 function drawStorageSchematic(
   context: CanvasRenderingContext2D,
   hierarchy: StorageHierarchy,
+  rackSummaries: readonly WarehouseRackSummary[],
   screenWidth: number,
   screenHeight: number,
   selectedBayKey: string | null,
@@ -296,6 +312,12 @@ function drawStorageSchematic(
     screenWidth,
     screenHeight,
     view,
+  );
+  const summariesByRack = new Map(
+    rackSummaries.map((summary) => [
+      rackKey(summary.aisle, summary.bay),
+      summary,
+    ]),
   );
 
   context.save();
@@ -362,6 +384,7 @@ function drawStorageSchematic(
       context,
       block,
       transform,
+      summariesByRack.get(rackKey(block.aisleCode, block.bayCode)),
       `${block.aisleCode}/${block.bayCode}` === selectedBayKey,
     );
   }
@@ -371,15 +394,16 @@ function drawStorageBay(
   context: CanvasRenderingContext2D,
   block: StorageBayBlock,
   transform: ViewportTransform,
+  summary: WarehouseRackSummary | undefined,
   selected: boolean,
 ): void {
   const position = worldToScreen({ x: block.x, y: block.y }, transform);
   const width = block.width * transform.scale;
   const height = block.depth * transform.scale;
-  const activeRatio =
-    block.locationCount === 0
-      ? 0
-      : block.activeLocationCount / block.locationCount;
+  const occupancyState = summary === undefined
+    ? "unknown"
+    : getRackOccupancyState(summary);
+  const palette = rackPalette(occupancyState, selected);
 
   context.save();
   context.shadowColor = selected
@@ -393,12 +417,12 @@ function drawStorageBay(
     position.x + width,
     position.y + height,
   );
-  rackGradient.addColorStop(0, selected ? "#7a73ff" : "#6379a9");
-  rackGradient.addColorStop(1, selected ? "#5148e5" : "#344a77");
+  rackGradient.addColorStop(0, palette.start);
+  rackGradient.addColorStop(1, palette.end);
   context.fillStyle = rackGradient;
   context.fillRect(position.x, position.y, width, height);
   context.restore();
-  context.strokeStyle = selected ? "#635bff" : "#2b4069";
+  context.strokeStyle = palette.border;
   context.lineWidth = selected ? 3 : 1.4;
   context.strokeRect(position.x, position.y, width, height);
 
@@ -410,8 +434,7 @@ function drawStorageBay(
   context.stroke();
 
   const statusWidth = clamp(width * 0.055, 3, 5);
-  context.fillStyle =
-    activeRatio === 1 ? "#20c779" : activeRatio === 0 ? "#eb5757" : "#f2a51a";
+  context.fillStyle = selected ? "#c4b5fd" : palette.accent;
   context.fillRect(position.x, position.y, statusWidth, height);
 
   const textLeft = position.x + statusWidth;
@@ -419,8 +442,7 @@ function drawStorageBay(
   const textCenterX = textLeft + textWidth / 2;
   const primaryFontSize = clamp(height * 0.27, 7, 11);
   const secondaryFontSize = clamp(height * 0.2, 6, 9);
-  const fullDetail = `${block.levelCount} seviye · ${block.locationCount} lokasyon`;
-  const compactDetail = `${block.levelCount}S · ${block.locationCount}L`;
+  const labels = rackOccupancyLabels(summary, block);
 
   context.save();
   context.beginPath();
@@ -432,8 +454,8 @@ function drawStorageBay(
 
   const detailLabel = chooseBayDetailLabel(
     context,
-    fullDetail,
-    compactDetail,
+    labels.full,
+    labels.compact,
     Math.max(0, textWidth - 10),
     height,
     secondaryFontSize,
@@ -465,6 +487,94 @@ function drawWarehouseFloor(
   context.strokeStyle = "#475569";
   context.lineWidth = 2;
   context.strokeRect(transform.offsetX, transform.offsetY, width, height);
+}
+
+interface RackPalette {
+  readonly start: string;
+  readonly end: string;
+  readonly border: string;
+  readonly accent: string;
+}
+
+function rackPalette(
+  state: RackOccupancyState,
+  selected: boolean,
+): RackPalette {
+  if (selected) {
+    return {
+      start: "#7a73ff",
+      end: "#5148e5",
+      border: "#635bff",
+      accent: "#c4b5fd",
+    };
+  }
+
+  const palettes: Record<RackOccupancyState, RackPalette> = {
+    empty: {
+      start: "#6794c9",
+      end: "#3e6b9f",
+      border: "#315984",
+      accent: "#b7d5f5",
+    },
+    partial: {
+      start: "#dda94e",
+      end: "#a96d20",
+      border: "#895617",
+      accent: "#ffe0a4",
+    },
+    full: {
+      start: "#3cba7b",
+      end: "#197b52",
+      border: "#12643f",
+      accent: "#a8efd0",
+    },
+    unknown: {
+      start: "#8e9aac",
+      end: "#657184",
+      border: "#515d6e",
+      accent: "#d2d7df",
+    },
+    inactive: {
+      start: "#aeb5bf",
+      end: "#858e9c",
+      border: "#707986",
+      accent: "#e0e3e8",
+    },
+  };
+  return palettes[state];
+}
+
+function rackOccupancyLabels(
+  summary: WarehouseRackSummary | undefined,
+  block: StorageBayBlock,
+): { readonly full: string; readonly compact: string } {
+  if (summary === undefined) {
+    return {
+      full: `${block.levelCount} seviye · ${block.locationCount} lokasyon`,
+      compact: `${block.levelCount}S · ${block.locationCount}L`,
+    };
+  }
+
+  const state = getRackOccupancyState(summary);
+  if (state === "empty") return { full: "Boş raf", compact: "Boş" };
+  if (state === "inactive") return { full: "Pasif raf", compact: "Pasif" };
+  if (state === "unknown") {
+    return { full: "Kullanım bilinmiyor", compact: "Bilinmiyor" };
+  }
+
+  const percent = summary.weightUtilizationPercent ?? 0;
+  return {
+    full: `%${formatMapNumber(percent)} · ${summary.cartonCount} koli`,
+    compact: `%${Math.round(percent)}`,
+  };
+}
+
+function rackKey(aisle: string, bay: string): string {
+  return `${aisle.replace(/^SYN-/i, "").toLocaleUpperCase("tr-TR")}/${bay.toLocaleUpperCase("tr-TR")}`;
+}
+
+function formatMapNumber(value: number): string {
+  return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 }).format(value);
 }
 
 function drawGrid(

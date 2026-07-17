@@ -200,9 +200,11 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--success);
+  background: #6794c9;
 }
 
+.status-dot.empty { background: #6794c9; }
 .status-dot.partial { background: var(--warning); }
-.status-dot.inactive { background: var(--danger); }
+.status-dot.full { background: var(--success); }
+.status-dot.unknown { background: #8e9aac; }
 .status-dot.selected { background: var(--accent); }

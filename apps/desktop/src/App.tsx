@@ -12,10 +12,12 @@ import {
   useWarehouseRackDetail,
   type WarehouseRackDetailState,
 } from "./useWarehouseRackDetail.js";
+import { useWarehouseRackSummaries } from "./useWarehouseRackSummaries.js";
 import { WarehouseCanvas } from "./WarehouseCanvas.js";
 
 export function App() {
   const locationsState = useWarehouseLocations();
+  const rackSummariesState = useWarehouseRackSummaries();
   const [aisleQuery, setAisleQuery] = useState("");
   const [selectedBayKey, setSelectedBayKey] = useState<string | null>(null);
   const visibleHierarchy = useMemo(
@@ -71,6 +73,11 @@ export function App() {
                 <WarehouseCanvas
                   map={sampleWarehouseMap}
                   hierarchy={visibleHierarchy}
+                  rackSummaries={
+                    rackSummariesState.status === "success"
+                      ? rackSummariesState.summaries
+                      : []
+                  }
                   selectedBayKey={selectedBayKey}
                   onBaySelect={(aisleCode, bayCode) =>
                     setSelectedBayKey(`${aisleCode}/${bayCode}`)
@@ -241,9 +248,10 @@ function SummaryCard({ icon, label, value, note, tone }: SummaryCardProps) {
 function MapLegend() {
   return (
     <div className="map-footer">
-      <div><span className="status-dot active" />Aktif</div>
-      <div><span className="status-dot partial" />Kısmen aktif</div>
-      <div><span className="status-dot inactive" />Pasif</div>
+      <div><span className="status-dot empty" />Boş</div>
+      <div><span className="status-dot partial" />Kısmi</div>
+      <div><span className="status-dot full" />Dolu</div>
+      <div><span className="status-dot unknown" />Bilinmiyor</div>
       <div><span className="status-dot selected" />Seçili</div>
     </div>
   );

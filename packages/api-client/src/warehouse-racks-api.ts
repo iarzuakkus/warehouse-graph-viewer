@@ -3,6 +3,7 @@ import type {
   WarehouseRackCarton,
   WarehouseRackDetail,
   WarehouseRackLocationDetail,
+  WarehouseRackSummary,
 } from "@warehouse/domain";
 
 import {
@@ -30,6 +31,36 @@ export class WarehouseRacksApiClient {
 
     return mapWarehouseRackResponse(await response.json());
   }
+
+  async getAllRackSummaries(
+    pageSize = 100,
+  ): Promise<readonly WarehouseRackSummary[]> {
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      throw new RangeError("Rack summary page size must be between 1 and 100.");
+    }
+
+    const summaries: WarehouseRackSummary[] = [];
+    let offset = 0;
+    while (true) {
+      const response = await this.fetchRack(
+        `${this.baseUrl}/warehouse-racks?offset=${offset}&limit=${pageSize}`,
+      );
+      if (!response.ok) throw new ApiRequestError(response.status);
+
+      const page = mapWarehouseRackSummariesResponse(await response.json());
+      summaries.push(...page);
+      if (page.length < pageSize) return summaries;
+      offset += pageSize;
+    }
+  }
+}
+
+export function mapWarehouseRackSummariesResponse(
+  value: unknown,
+): readonly WarehouseRackSummary[] {
+  return requireArray(value, "Warehouse rack summaries response").map(
+    (summary, index) => mapRackSummary(summary, `racks[${index}]`),
+  );
 }
 
 export function mapWarehouseRackResponse(value: unknown): WarehouseRackDetail {
@@ -38,39 +69,49 @@ export function mapWarehouseRackResponse(value: unknown): WarehouseRackDetail {
     mapRackLocation,
   );
   const detail: WarehouseRackDetail = {
-    aisle: requireString(response.aisle, "aisle"),
-    bay: requireString(response.bay, "bay"),
-    levelCount: requirePositiveInteger(response.level_count, "level_count"),
-    locationCount: requirePositiveInteger(
-      response.location_count,
-      "location_count",
-    ),
-    activeLocationCount: requireNonNegativeInteger(
-      response.active_location_count,
-      "active_location_count",
-    ),
-    cartonCount: requireNonNegativeInteger(response.carton_count, "carton_count"),
-    productCount: requireNonNegativeInteger(
-      response.product_count,
-      "product_count",
-    ),
-    totalMaxWeightKg: requireNullableNonNegativeNumber(
-      response.total_max_weight_kg,
-      "total_max_weight_kg",
-    ),
-    totalUsedWeightKg: requireNullableNonNegativeNumber(
-      response.total_used_weight_kg,
-      "total_used_weight_kg",
-    ),
-    weightUtilizationPercent: requireNullableNonNegativeNumber(
-      response.weight_utilization_percent,
-      "weight_utilization_percent",
-    ),
+    ...mapRackSummary(response, "rack"),
     locations,
   };
 
   validateRackCounts(detail);
   return detail;
+}
+
+function mapRackSummary(value: unknown, field: string): WarehouseRackSummary {
+  const response = requireRecord(value, field);
+  return {
+    aisle: requireString(response.aisle, `${field}.aisle`),
+    bay: requireString(response.bay, `${field}.bay`),
+    levelCount: requirePositiveInteger(response.level_count, `${field}.level_count`),
+    locationCount: requirePositiveInteger(
+      response.location_count,
+      `${field}.location_count`,
+    ),
+    activeLocationCount: requireNonNegativeInteger(
+      response.active_location_count,
+      `${field}.active_location_count`,
+    ),
+    cartonCount: requireNonNegativeInteger(
+      response.carton_count,
+      `${field}.carton_count`,
+    ),
+    productCount: requireNonNegativeInteger(
+      response.product_count,
+      `${field}.product_count`,
+    ),
+    totalMaxWeightKg: requireNullableNonNegativeNumber(
+      response.total_max_weight_kg,
+      `${field}.total_max_weight_kg`,
+    ),
+    totalUsedWeightKg: requireNullableNonNegativeNumber(
+      response.total_used_weight_kg,
+      `${field}.total_used_weight_kg`,
+    ),
+    weightUtilizationPercent: requireNullableNonNegativeNumber(
+      response.weight_utilization_percent,
+      `${field}.weight_utilization_percent`,
+    ),
+  };
 }
 
 function mapRackLocation(
