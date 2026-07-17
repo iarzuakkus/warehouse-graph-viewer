@@ -11,3 +11,8 @@ export {
   WarehouseLocationsApiClient,
   mapWarehouseLocationsResponse,
 } from "./warehouse-locations-api.js";
+
+export {
+  WarehouseRacksApiClient,
+  mapWarehouseRackResponse,
+} from "./warehouse-racks-api.js";

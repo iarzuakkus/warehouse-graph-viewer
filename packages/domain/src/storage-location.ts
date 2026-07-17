@@ -29,6 +29,14 @@ export interface StorageHierarchy {
   readonly locationCount: number;
 }
 
+export interface WarehouseRackDetail {
+  readonly aisle: string;
+  readonly bay: string;
+  readonly locationCount: number;
+  readonly activeLocationCount: number;
+  readonly locations: readonly StorageLocation[];
+}
+
 export class StorageLocationValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -102,6 +110,34 @@ export function buildStorageHierarchy(
     aisles,
     locationCount: locations.length,
   };
+}
+
+export function filterStorageHierarchy(
+  hierarchy: StorageHierarchy,
+  query: string,
+): StorageHierarchy {
+  const normalizedQuery = query.trim().toLocaleUpperCase("tr-TR");
+  if (normalizedQuery.length === 0) return hierarchy;
+
+  const aisles = hierarchy.aisles.filter((aisle) =>
+    aisle.code.toLocaleUpperCase("tr-TR").includes(normalizedQuery),
+  );
+  const locationCount = aisles.reduce(
+    (aisleTotal, aisle) =>
+      aisleTotal +
+      aisle.bays.reduce(
+        (bayTotal, bay) =>
+          bayTotal +
+          bay.levels.reduce(
+            (levelTotal, level) => levelTotal + level.locations.length,
+            0,
+          ),
+        0,
+      ),
+    0,
+  );
+
+  return { aisles, locationCount };
 }
 
 function validateStorageLocation(location: StorageLocation): void {

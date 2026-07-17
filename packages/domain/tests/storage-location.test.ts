@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   StorageLocationValidationError,
   buildStorageHierarchy,
+  filterStorageHierarchy,
   type StorageLocation,
 } from "../src/index.js";
 
@@ -71,5 +72,25 @@ describe("buildStorageHierarchy", () => {
     expect(() => buildStorageHierarchy([invalidLocation])).toThrow(
       StorageLocationValidationError,
     );
+  });
+});
+
+describe("filterStorageHierarchy", () => {
+  it("filters aisles case-insensitively and updates the location count", () => {
+    const hierarchy = buildStorageHierarchy([
+      createLocation(),
+      createLocation({ id: 2, aisle: "SYN-A002" }),
+    ]);
+
+    const filtered = filterStorageHierarchy(hierarchy, "a002");
+
+    expect(filtered.aisles.map((aisle) => aisle.code)).toEqual(["SYN-A002"]);
+    expect(filtered.locationCount).toBe(1);
+  });
+
+  it("returns the original hierarchy for a blank query", () => {
+    const hierarchy = buildStorageHierarchy([createLocation()]);
+
+    expect(filterStorageHierarchy(hierarchy, "   ")).toBe(hierarchy);
   });
 });

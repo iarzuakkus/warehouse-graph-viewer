@@ -1,5 +1,6 @@
 export {
   ViewportValidationError,
+  createNavigatedViewportTransform,
   createViewportTransform,
   rackToScreenRect,
   screenToWorld,
@@ -8,6 +9,7 @@ export {
 
 export type {
   ScreenRect,
+  ScreenPan,
   ViewportTransform,
 } from "./viewport.js";
 

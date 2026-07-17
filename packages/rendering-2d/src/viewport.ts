@@ -19,6 +19,11 @@ export interface ScreenRect {
   readonly height: number;
 }
 
+export interface ScreenPan {
+  readonly x: number;
+  readonly y: number;
+}
+
 export class ViewportValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -65,6 +70,31 @@ export function createViewportTransform(
     offsetY: (screenHeight - worldDepth * scale) / 2,
     worldOriginX: 0,
     worldOriginY: 0,
+  };
+}
+
+export function createNavigatedViewportTransform(
+  baseTransform: ViewportTransform,
+  worldWidth: number,
+  worldDepth: number,
+  screenWidth: number,
+  screenHeight: number,
+  zoom: number,
+  pan: ScreenPan,
+): ViewportTransform {
+  if (!Number.isFinite(zoom) || zoom <= 0) {
+    throw new ViewportValidationError("Viewport zoom must be positive and finite.");
+  }
+  if (!Number.isFinite(pan.x) || !Number.isFinite(pan.y)) {
+    throw new ViewportValidationError("Viewport pan must be finite.");
+  }
+
+  const scale = baseTransform.scale * zoom;
+  return {
+    ...baseTransform,
+    scale,
+    offsetX: (screenWidth - worldWidth * scale) / 2 + pan.x,
+    offsetY: (screenHeight - worldDepth * scale) / 2 + pan.y,
   };
 }
 

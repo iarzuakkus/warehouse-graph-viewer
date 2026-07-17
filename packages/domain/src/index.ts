@@ -36,6 +36,7 @@ export type {
 export {
   StorageLocationValidationError,
   buildStorageHierarchy,
+  filterStorageHierarchy,
 } from "./storage-location.js";
 
 export type {
@@ -44,4 +45,5 @@ export type {
   StorageHierarchy,
   StorageLevel,
   StorageLocation,
+  WarehouseRackDetail,
 } from "./storage-location.js";

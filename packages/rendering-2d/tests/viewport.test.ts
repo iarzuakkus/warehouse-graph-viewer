@@ -4,6 +4,7 @@ import type { Rack } from "@warehouse/domain";
 
 import {
   ViewportValidationError,
+  createNavigatedViewportTransform,
   createViewportTransform,
   rackToScreenRect,
   screenToWorld,
@@ -72,5 +73,45 @@ describe("2D viewport calculations", () => {
     expect(() => createViewportTransform(30, 20, 100, 100, 50)).toThrow(
       ViewportValidationError,
     );
+  });
+
+  it("zooms around the center of the screen", () => {
+    const base = createViewportTransform(30, 20, 800, 600, 50);
+    const zoomed = createNavigatedViewportTransform(
+      base,
+      30,
+      20,
+      800,
+      600,
+      2,
+      { x: 0, y: 0 },
+    );
+
+    expect(zoomed.scale).toBeCloseTo(base.scale * 2);
+    expect(zoomed.offsetX + (30 * zoomed.scale) / 2).toBeCloseTo(400);
+    expect(zoomed.offsetY + (20 * zoomed.scale) / 2).toBeCloseTo(300);
+  });
+
+  it("adds screen-space pan after fitting and zooming", () => {
+    const base = createViewportTransform(30, 20, 800, 600, 50);
+    const centered = createNavigatedViewportTransform(
+      base, 30, 20, 800, 600, 1, { x: 0, y: 0 },
+    );
+    const panned = createNavigatedViewportTransform(
+      base, 30, 20, 800, 600, 1, { x: 25, y: -10 },
+    );
+
+    expect(panned.offsetX).toBeCloseTo(centered.offsetX + 25);
+    expect(panned.offsetY).toBeCloseTo(centered.offsetY - 10);
+  });
+
+  it("rejects a non-positive zoom", () => {
+    const base = createViewportTransform(30, 20, 800, 600, 50);
+
+    expect(() =>
+      createNavigatedViewportTransform(
+        base, 30, 20, 800, 600, 0, { x: 0, y: 0 },
+      ),
+    ).toThrow(ViewportValidationError);
   });
 });

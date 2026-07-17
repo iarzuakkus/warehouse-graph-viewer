@@ -1,0 +1,120 @@
+.sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0 16px 16px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 76px;
+  padding: 0 10px;
+  border-bottom: 1px solid #edf0f6;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid #8d86ff;
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 20px;
+  transform: rotate(45deg);
+}
+
+.brand-mark svg { transform: rotate(-45deg); }
+
+.main-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 25px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 43px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  color: #44516b;
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-item svg { font-size: 17px; }
+.nav-item:hover:not(:disabled) { background: #f6f7fb; }
+
+.nav-item.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.nav-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.sidebar-spacer { flex: 1; }
+
+.sidebar-action,
+.profile-card {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.sidebar-action { cursor: pointer; }
+.sidebar-action svg { font-size: 17px; }
+
+.profile-card .avatar,
+.top-profile .avatar {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  color: #5f6d86;
+  background: #f2f4f8;
+  font-size: 15px;
+}
+
+.profile-card div,
+.top-profile div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-card small,
+.top-profile small {
+  color: var(--muted);
+  font-size: 9px;
+}
