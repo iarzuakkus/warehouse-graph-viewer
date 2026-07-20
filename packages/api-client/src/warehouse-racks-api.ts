@@ -3,6 +3,9 @@ import type {
   WarehouseRackCarton,
   WarehouseRackDetail,
   WarehouseRackLocationDetail,
+  WarehouseRackScene,
+  WarehouseRackSceneCarton,
+  WarehouseRackSceneLocation,
   WarehouseRackSummary,
 } from "@warehouse/domain";
 
@@ -53,6 +56,28 @@ export class WarehouseRacksApiClient {
       offset += pageSize;
     }
   }
+
+  async getWarehouseScene(
+    pageSize = 100,
+  ): Promise<readonly WarehouseRackScene[]> {
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      throw new RangeError("Rack scene page size must be between 1 and 100.");
+    }
+
+    const racks: WarehouseRackScene[] = [];
+    let offset = 0;
+    while (true) {
+      const response = await this.fetchRack(
+        `${this.baseUrl}/warehouse-racks/scene?offset=${offset}&limit=${pageSize}`,
+      );
+      if (!response.ok) throw new ApiRequestError(response.status);
+
+      const page = mapWarehouseRackSceneResponse(await response.json());
+      racks.push(...page);
+      if (page.length < pageSize) return racks;
+      offset += pageSize;
+    }
+  }
 }
 
 export function mapWarehouseRackSummariesResponse(
@@ -75,6 +100,169 @@ export function mapWarehouseRackResponse(value: unknown): WarehouseRackDetail {
 
   validateRackCounts(detail);
   return detail;
+}
+
+export function mapWarehouseRackSceneResponse(
+  value: unknown,
+): readonly WarehouseRackScene[] {
+  return requireArray(value, "Warehouse rack scene response").map(
+    (rack, index) => mapRackScene(rack, `racks[${index}]`),
+  );
+}
+
+function mapRackScene(value: unknown, field: string): WarehouseRackScene {
+  const response = requireRecord(value, field);
+  const scene: WarehouseRackScene = {
+    aisle: requireString(response.aisle, `${field}.aisle`),
+    bay: requireString(response.bay, `${field}.bay`),
+    widthCm: requirePositiveNumber(response.width_cm, `${field}.width_cm`),
+    depthCm: requirePositiveNumber(response.depth_cm, `${field}.depth_cm`),
+    totalHeightCm: requirePositiveNumber(
+      response.total_height_cm,
+      `${field}.total_height_cm`,
+    ),
+    levelClearHeightCm: requirePositiveNumber(
+      response.level_clear_height_cm,
+      `${field}.level_clear_height_cm`,
+    ),
+    levelCount: requirePositiveInteger(
+      response.level_count,
+      `${field}.level_count`,
+    ),
+    slotsPerLevel: requirePositiveInteger(
+      response.slots_per_level,
+      `${field}.slots_per_level`,
+    ),
+    locationCount: requireNonNegativeInteger(
+      response.location_count,
+      `${field}.location_count`,
+    ),
+    activeLocationCount: requireNonNegativeInteger(
+      response.active_location_count,
+      `${field}.active_location_count`,
+    ),
+    locations: requireArray(response.locations, `${field}.locations`).map(
+      (location, index) =>
+        mapRackSceneLocation(location, `${field}.locations[${index}]`),
+    ),
+  };
+
+  validateRackSceneCounts(scene, field);
+  return scene;
+}
+
+function mapRackSceneLocation(
+  value: unknown,
+  field: string,
+): WarehouseRackSceneLocation {
+  const location = requireRecord(value, field);
+  return {
+    id: requirePositiveInteger(location.id, `${field}.id`),
+    level: requireString(location.level, `${field}.level`),
+    slot: requireString(location.slot, `${field}.slot`),
+    isActive: requireBoolean(location.is_active, `${field}.is_active`),
+    usableWidthCm: requirePositiveNumber(
+      location.usable_width_cm,
+      `${field}.usable_width_cm`,
+    ),
+    usableDepthCm: requirePositiveNumber(
+      location.usable_depth_cm,
+      `${field}.usable_depth_cm`,
+    ),
+    usableHeightCm: requirePositiveNumber(
+      location.usable_height_cm,
+      `${field}.usable_height_cm`,
+    ),
+    maxWeightKg: requireNullablePositiveNumber(
+      location.max_weight_kg,
+      `${field}.max_weight_kg`,
+    ),
+    usedWeightKg: requireNullableNonNegativeNumber(
+      location.used_weight_kg,
+      `${field}.used_weight_kg`,
+    ),
+    weightUtilizationPercent: requireNullableNonNegativeNumber(
+      location.weight_utilization_percent,
+      `${field}.weight_utilization_percent`,
+    ),
+    volumeUtilizationPercent: requireNonNegativeNumber(
+      location.volume_utilization_percent,
+      `${field}.volume_utilization_percent`,
+    ),
+    cartons: requireArray(location.cartons, `${field}.cartons`).map(
+      (carton, index) =>
+        mapRackSceneCarton(carton, `${field}.cartons[${index}]`),
+    ),
+  };
+}
+
+function mapRackSceneCarton(
+  value: unknown,
+  field: string,
+): WarehouseRackSceneCarton {
+  const carton = requireRecord(value, field);
+  return {
+    id: requirePositiveInteger(carton.id, `${field}.id`),
+    cartonNumber: requireString(
+      carton.carton_number,
+      `${field}.carton_number`,
+    ),
+    cartonTypeCode: requireString(
+      carton.carton_type_code,
+      `${field}.carton_type_code`,
+    ),
+    outerLengthCm: requirePositiveNumber(
+      carton.outer_length_cm,
+      `${field}.outer_length_cm`,
+    ),
+    outerWidthCm: requirePositiveNumber(
+      carton.outer_width_cm,
+      `${field}.outer_width_cm`,
+    ),
+    outerHeightCm: requirePositiveNumber(
+      carton.outer_height_cm,
+      `${field}.outer_height_cm`,
+    ),
+    positionXCm: requireNonNegativeNumber(
+      carton.position_x_cm,
+      `${field}.position_x_cm`,
+    ),
+    positionYCm: requireNonNegativeNumber(
+      carton.position_y_cm,
+      `${field}.position_y_cm`,
+    ),
+    positionZCm: requireNonNegativeNumber(
+      carton.position_z_cm,
+      `${field}.position_z_cm`,
+    ),
+    rotationDegrees: requirePlacementRotation(
+      carton.rotation_degrees,
+      `${field}.rotation_degrees`,
+    ),
+  };
+}
+
+function validateRackSceneCounts(
+  scene: WarehouseRackScene,
+  field: string,
+): void {
+  if (scene.locationCount !== scene.locations.length) {
+    throw new ApiContractError(
+      `${field}.location_count must match the returned locations.`,
+    );
+  }
+  const activeCount = scene.locations.filter((location) => location.isActive).length;
+  if (scene.activeLocationCount !== activeCount) {
+    throw new ApiContractError(
+      `${field}.active_location_count must match the returned locations.`,
+    );
+  }
+  const levelCount = new Set(scene.locations.map((location) => location.level)).size;
+  if (scene.levelCount !== levelCount) {
+    throw new ApiContractError(
+      `${field}.level_count must match the returned locations.`,
+    );
+  }
 }
 
 function mapRackSummary(value: unknown, field: string): WarehouseRackSummary {
@@ -263,6 +451,44 @@ function requirePositiveInteger(value: unknown, field: string): number {
 function requireNonNegativeInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new ApiContractError(`${field} must be a non-negative integer.`);
+  }
+  return value;
+}
+
+function requirePositiveNumber(value: unknown, field: string): number {
+  const number = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim().length > 0
+      ? Number(value)
+      : Number.NaN;
+  if (!Number.isFinite(number) || number <= 0) {
+    throw new ApiContractError(`${field} must be a positive number.`);
+  }
+  return number;
+}
+
+function requireNonNegativeNumber(value: unknown, field: string): number {
+  const number = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim().length > 0
+      ? Number(value)
+      : Number.NaN;
+  if (!Number.isFinite(number) || number < 0) {
+    throw new ApiContractError(`${field} must be a non-negative number.`);
+  }
+  return number;
+}
+
+function requirePlacementRotation(value: unknown, field: string): 0 | 90 {
+  if (value !== 0 && value !== 90) {
+    throw new ApiContractError(`${field} must be 0 or 90 degrees.`);
+  }
+  return value;
+}
+
+function requireBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new ApiContractError(`${field} must be a boolean.`);
   }
   return value;
 }

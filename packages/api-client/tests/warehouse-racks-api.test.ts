@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   WarehouseRacksApiClient,
+  mapWarehouseRackSceneResponse,
   mapWarehouseRackSummariesResponse,
   mapWarehouseRackResponse,
   type FetchGraph,
@@ -53,6 +54,48 @@ const rackResponse = {
             units_per_carton: 500,
             carton_type_code: "KOLI-L",
           },
+        },
+      ],
+    },
+  ],
+};
+
+const rackSceneResponse = {
+  aisle: "SYN-A003",
+  bay: "B001",
+  width_cm: "210.00",
+  depth_cm: "90.00",
+  total_height_cm: "130.00",
+  level_clear_height_cm: "60.00",
+  level_count: 1,
+  slots_per_level: 2,
+  location_count: 1,
+  active_location_count: 1,
+  locations: [
+    {
+      id: 17,
+      level: "L01",
+      slot: "S01",
+      is_active: true,
+      usable_width_cm: "100.00",
+      usable_depth_cm: "80.00",
+      usable_height_cm: "60.00",
+      max_weight_kg: "750.000",
+      used_weight_kg: "437.500",
+      weight_utilization_percent: "58.33",
+      volume_utilization_percent: "27.54",
+      cartons: [
+        {
+          id: 25,
+          carton_number: "KOLI-00025",
+          carton_type_code: "KOLI-L",
+          outer_length_cm: "42.00",
+          outer_width_cm: "32.00",
+          outer_height_cm: "27.00",
+          position_x_cm: "10.00",
+          position_y_cm: "0.00",
+          position_z_cm: "5.00",
+          rotation_degrees: 90,
         },
       ],
     },
@@ -164,6 +207,33 @@ describe("WarehouseRacksApiClient", () => {
       "/api/warehouse-racks?offset=2&limit=2",
     );
   });
+
+  it("loads every rack scene page", async () => {
+    const fetchRack = vi
+      .fn<FetchGraph>()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          rackSceneResponse,
+          { ...rackSceneResponse, bay: "B002" },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [{ ...rackSceneResponse, bay: "B003" }],
+      });
+    const client = new WarehouseRacksApiClient("/api", fetchRack);
+
+    const racks = await client.getWarehouseScene(2);
+
+    expect(racks.map((rack) => rack.bay)).toEqual(["B001", "B002", "B003"]);
+    expect(fetchRack).toHaveBeenNthCalledWith(
+      2,
+      "/api/warehouse-racks/scene?offset=2&limit=2",
+    );
+  });
 });
 
 describe("mapWarehouseRackSummariesResponse", () => {
@@ -173,5 +243,99 @@ describe("mapWarehouseRackSummariesResponse", () => {
 
     expect(weightUtilizationPercent).toBe(58.33);
     expect(cartonCount).toBe(1);
+  });
+});
+
+describe("mapWarehouseRackSceneResponse", () => {
+  it("maps physical rack, location, and carton values", () => {
+    const rack = mapWarehouseRackSceneResponse([rackSceneResponse])[0]!;
+
+    expect(rack).toMatchObject({
+      widthCm: 210,
+      depthCm: 90,
+      totalHeightCm: 130,
+      levelClearHeightCm: 60,
+      slotsPerLevel: 2,
+    });
+    expect(rack.locations[0]).toMatchObject({
+      usableWidthCm: 100,
+      usableDepthCm: 80,
+      usableHeightCm: 60,
+      volumeUtilizationPercent: 27.54,
+    });
+    expect(rack.locations[0]?.cartons[0]).toEqual({
+      id: 25,
+      cartonNumber: "KOLI-00025",
+      cartonTypeCode: "KOLI-L",
+      outerLengthCm: 42,
+      outerWidthCm: 32,
+      outerHeightCm: 27,
+      positionXCm: 10,
+      positionYCm: 0,
+      positionZCm: 5,
+      rotationDegrees: 90,
+    });
+  });
+
+  it("accepts empty carton collections", () => {
+    const rack = mapWarehouseRackSceneResponse([{
+      ...rackSceneResponse,
+      locations: [{ ...rackSceneResponse.locations[0], cartons: [] }],
+    }])[0]!;
+
+    expect(rack.locations[0]?.cartons).toEqual([]);
+  });
+
+  it("rejects invalid physical carton dimensions", () => {
+    expect(() => mapWarehouseRackSceneResponse([{
+      ...rackSceneResponse,
+      locations: [{
+        ...rackSceneResponse.locations[0],
+        cartons: [{
+          ...rackSceneResponse.locations[0]!.cartons[0],
+          outer_height_cm: 0,
+        }],
+      }],
+    }])).toThrow("outer_height_cm must be a positive number");
+  });
+
+  it("rejects negative placement coordinates", () => {
+    expect(() => mapWarehouseRackSceneResponse([{
+      ...rackSceneResponse,
+      locations: [{
+        ...rackSceneResponse.locations[0],
+        cartons: [{
+          ...rackSceneResponse.locations[0]!.cartons[0],
+          position_x_cm: -1,
+        }],
+      }],
+    }])).toThrow("position_x_cm must be a non-negative number");
+  });
+
+  it("rejects unsupported carton rotations", () => {
+    expect(() => mapWarehouseRackSceneResponse([{
+      ...rackSceneResponse,
+      locations: [{
+        ...rackSceneResponse.locations[0],
+        cartons: [{
+          ...rackSceneResponse.locations[0]!.cartons[0],
+          rotation_degrees: 45,
+        }],
+      }],
+    }])).toThrow("rotation_degrees must be 0 or 90 degrees");
+  });
+
+  it("rejects location counts that do not match returned data", () => {
+    expect(() => mapWarehouseRackSceneResponse([{
+      ...rackSceneResponse,
+      location_count: 2,
+    }])).toThrow("location_count must match");
+  });
+
+  it("rejects level counts that do not match returned locations", () => {
+    expect(() => mapWarehouseRackSceneResponse([{
+      ...rackSceneResponse,
+      level_count: 2,
+    }])).toThrow("level_count must match");
   });
 });

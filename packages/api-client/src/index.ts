@@ -14,6 +14,7 @@ export {
 
 export {
   WarehouseRacksApiClient,
+  mapWarehouseRackSceneResponse,
   mapWarehouseRackSummariesResponse,
   mapWarehouseRackResponse,
 } from "./warehouse-racks-api.js";

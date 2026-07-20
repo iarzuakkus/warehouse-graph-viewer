@@ -12,6 +12,9 @@
     },
     {
       "path": "./packages/rendering-2d"
+    },
+    {
+      "path": "./packages/rendering-3d"
     }
   ]
 }

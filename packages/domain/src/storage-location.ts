@@ -46,6 +46,48 @@ export interface WarehouseRackDetail extends WarehouseRackSummary {
   readonly locations: readonly WarehouseRackLocationDetail[];
 }
 
+export interface WarehouseRackSceneCarton {
+  readonly id: number;
+  readonly cartonNumber: string;
+  readonly cartonTypeCode: string;
+  readonly outerLengthCm: number;
+  readonly outerWidthCm: number;
+  readonly outerHeightCm: number;
+  readonly positionXCm: number;
+  readonly positionYCm: number;
+  readonly positionZCm: number;
+  readonly rotationDegrees: 0 | 90;
+}
+
+export interface WarehouseRackSceneLocation {
+  readonly id: number;
+  readonly level: string;
+  readonly slot: string;
+  readonly isActive: boolean;
+  readonly usableWidthCm: number;
+  readonly usableDepthCm: number;
+  readonly usableHeightCm: number;
+  readonly maxWeightKg: number | null;
+  readonly usedWeightKg: number | null;
+  readonly weightUtilizationPercent: number | null;
+  readonly volumeUtilizationPercent: number;
+  readonly cartons: readonly WarehouseRackSceneCarton[];
+}
+
+export interface WarehouseRackScene {
+  readonly aisle: string;
+  readonly bay: string;
+  readonly widthCm: number;
+  readonly depthCm: number;
+  readonly totalHeightCm: number;
+  readonly levelClearHeightCm: number;
+  readonly levelCount: number;
+  readonly slotsPerLevel: number;
+  readonly locationCount: number;
+  readonly activeLocationCount: number;
+  readonly locations: readonly WarehouseRackSceneLocation[];
+}
+
 export type WarehouseCartonStatus =
   | "available"
   | "reserved"

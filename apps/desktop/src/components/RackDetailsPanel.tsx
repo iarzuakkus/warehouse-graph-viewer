@@ -1,11 +1,26 @@
+import { useEffect, useRef } from "react";
+
 import type {
   WarehouseCartonStatus,
   WarehouseRackCarton,
   WarehouseRackDetail,
   WarehouseRackLocationDetail,
+  WarehouseRackScene,
+  WarehouseRackSceneCarton,
+  WarehouseRackSceneLocation,
 } from "@warehouse/domain";
 
-export function RackDetailsPanel({ detail }: { readonly detail: WarehouseRackDetail }) {
+interface RackDetailsPanelProps {
+  readonly detail: WarehouseRackDetail;
+  readonly sceneRack?: WarehouseRackScene | null;
+  readonly selectedCartonId?: number | null;
+}
+
+export function RackDetailsPanel({
+  detail,
+  sceneRack = null,
+  selectedCartonId = null,
+}: RackDetailsPanelProps) {
   const aisleCode = detail.aisle.replace(/^SYN-/i, "");
   const allActive = detail.activeLocationCount === detail.locationCount;
   const levels = [...new Set(detail.locations.map((location) => location.level))]
@@ -14,6 +29,10 @@ export function RackDetailsPanel({ detail }: { readonly detail: WarehouseRackDet
     (sum, location) => sum + location.distanceFromDispatchM,
     0,
   ) / detail.locationCount;
+  const volumeUtilizationPercent = calculateRackVolumeUtilization(sceneRack);
+  const sceneLocationsById = new Map(
+    sceneRack?.locations.map((location) => [location.id, location]) ?? [],
+  );
 
   return (
     <div className="bay-details">
@@ -47,6 +66,21 @@ export function RackDetailsPanel({ detail }: { readonly detail: WarehouseRackDet
         </dl>
       </section>
 
+      {volumeUtilizationPercent === null ? null : (
+        <section className="detail-section rack-capacity">
+          <div className="capacity-heading">
+            <h4>Hacim Kullanımı</h4>
+            <strong>{formatPercent(volumeUtilizationPercent)}</strong>
+          </div>
+          <div className="utilization-track" aria-label="Raf hacim kullanım oranı">
+            <span
+              data-tone={utilizationTone(volumeUtilizationPercent)}
+              style={{ width: `${clampPercent(volumeUtilizationPercent)}%` }}
+            />
+          </div>
+        </section>
+      )}
+
       <section className="location-summary rack-summary-grid">
         <SummaryMetric label="Ürün" value={detail.productCount} />
         <SummaryMetric label="Koli" value={detail.cartonCount} />
@@ -59,12 +93,28 @@ export function RackDetailsPanel({ detail }: { readonly detail: WarehouseRackDet
           const locations = detail.locations.filter(
             (location) => location.level === level,
           );
+          const containsSelectedCarton =
+            selectedCartonId !== null &&
+            locations.some((location) =>
+              location.cartons.some(
+                (carton) => carton.id === selectedCartonId,
+              ),
+            );
           return (
-            <details className="level-card" key={level}>
+            <details
+              className="level-card"
+              key={level}
+              {...(containsSelectedCarton ? { open: true } : {})}
+            >
               <summary>{level}<span>{locations.length} lokasyon</span></summary>
               <div className="slot-list">
                 {locations.map((location) => (
-                  <LocationDetail key={location.id} location={location} />
+                  <LocationDetail
+                    key={location.id}
+                    location={location}
+                    sceneLocation={sceneLocationsById.get(location.id)}
+                    selectedCartonId={selectedCartonId}
+                  />
                 ))}
               </div>
             </details>
@@ -79,9 +129,25 @@ function SummaryMetric({ label, value }: { readonly label: string; readonly valu
   return <div><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function LocationDetail({ location }: { readonly location: WarehouseRackLocationDetail }) {
+function LocationDetail({
+  location,
+  sceneLocation,
+  selectedCartonId,
+}: {
+  readonly location: WarehouseRackLocationDetail;
+  readonly sceneLocation: WarehouseRackSceneLocation | undefined;
+  readonly selectedCartonId: number | null;
+}) {
+  const containsSelectedCarton =
+    selectedCartonId !== null &&
+    location.cartons.some((carton) => carton.id === selectedCartonId);
+
   return (
-    <article className="slot-card" data-active={location.isActive}>
+    <article
+      className="slot-card"
+      data-active={location.isActive}
+      data-selected={containsSelectedCarton}
+    >
       <div className="slot-heading">
         <div><strong>{location.slot}</strong><small>ID {location.id}</small></div>
         <span className={location.isActive ? "slot-state active" : "slot-state inactive"}>
@@ -91,6 +157,9 @@ function LocationDetail({ location }: { readonly location: WarehouseRackLocation
 
       <dl className="slot-properties">
         <div><dt>Kullanım</dt><dd>{formatPercent(location.weightUtilizationPercent)}</dd></div>
+        {sceneLocation === undefined ? null : (
+          <div><dt>Hacim</dt><dd>{formatPercent(sceneLocation.volumeUtilizationPercent)}</dd></div>
+        )}
         <div><dt>Ağırlık</dt><dd>{formatWeight(location.usedWeightKg)} / {formatWeight(location.maxWeightKg)}</dd></div>
         <div><dt>Sevkiyat uzaklığı</dt><dd>{formatNumber(location.distanceFromDispatchM)} m</dd></div>
       </dl>
@@ -103,18 +172,75 @@ function LocationDetail({ location }: { readonly location: WarehouseRackLocation
         {location.cartons.length === 0 ? (
           <p className="empty-inventory">Bu lokasyonda koli bulunmuyor.</p>
         ) : (
-          location.cartons.map((carton) => (
-            <CartonCard carton={carton} key={carton.id} />
-          ))
+          location.cartons.map((carton) => {
+            const sceneCarton = sceneLocation?.cartons.find(
+              (candidate) => candidate.id === carton.id,
+            );
+            return (
+              <CartonCard
+                carton={carton}
+                key={carton.id}
+                sceneCarton={sceneCarton}
+                selected={carton.id === selectedCartonId}
+              />
+            );
+          })
         )}
       </div>
     </article>
   );
 }
 
-function CartonCard({ carton }: { readonly carton: WarehouseRackCarton }) {
+function calculateRackVolumeUtilization(
+  sceneRack: WarehouseRackScene | null,
+): number | null {
+  if (sceneRack === null || sceneRack.locations.length === 0) return null;
+
+  let totalVolumeCm3 = 0;
+  let usedVolumeCm3 = 0;
+  for (const location of sceneRack.locations) {
+    const locationVolume =
+      location.usableWidthCm *
+      location.usableDepthCm *
+      location.usableHeightCm;
+    totalVolumeCm3 += locationVolume;
+    usedVolumeCm3 +=
+      locationVolume * (location.volumeUtilizationPercent / 100);
+  }
+  return totalVolumeCm3 === 0 ? null : (usedVolumeCm3 / totalVolumeCm3) * 100;
+}
+
+function CartonCard({
+  carton,
+  sceneCarton,
+  selected,
+}: {
+  readonly carton: WarehouseRackCarton;
+  readonly sceneCarton: WarehouseRackSceneCarton | undefined;
+  readonly selected: boolean;
+}) {
+  const cardRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      cardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [selected]);
+
   return (
-    <section className="carton-card">
+    <section
+      ref={cardRef}
+      className="carton-card"
+      data-selected={selected}
+    >
       <div className="carton-heading">
         <div><strong>{carton.product.name}</strong><span>{carton.product.sku}</span></div>
         <span className="carton-status" data-status={carton.status}>
@@ -133,6 +259,14 @@ function CartonCard({ carton }: { readonly carton: WarehouseRackCarton }) {
         <span>{carton.cartonNumber}</span>
         <span>{carton.packaging.cartonTypeCode} · {carton.packaging.unitsPerCarton} adet</span>
       </div>
+      {sceneCarton === undefined ? null : (
+        <p className="carton-physical-details">
+          Dış ölçü: {formatNumber(sceneCarton.outerLengthCm)} × {formatNumber(sceneCarton.outerWidthCm)} × {formatNumber(sceneCarton.outerHeightCm)} cm
+          {sceneCarton.rotationDegrees === 0
+            ? ""
+            : ` · ${sceneCarton.rotationDegrees}° döndürülmüş`}
+        </p>
+      )}
       {carton.expiresAt === null ? null : (
         <p className="expiry-date">Son kullanma: {formatDate(carton.expiresAt)}</p>
       )}

@@ -239,6 +239,13 @@
 }
 
 .slot-card[data-active="false"] { border-color: #f3d6aa; background: #fff9ef; }
+
+.slot-card[data-selected="true"] {
+  border-color: #c9c2ff;
+  background: #f8f7ff;
+  box-shadow: 0 0 0 2px rgb(99 91 255 / 8%);
+}
+
 .slot-heading {
   display: flex;
   align-items: center;
@@ -328,10 +335,17 @@
 }
 
 .carton-card {
+  scroll-margin-block: 18px;
   padding: 8px;
   border: 1px solid #e1e6ef;
   border-radius: 7px;
   background: #ffffff;
+}
+
+.carton-card[data-selected="true"] {
+  border-color: var(--accent);
+  background: #fbfaff;
+  box-shadow: 0 0 0 2px rgb(99 91 255 / 12%);
 }
 
 .carton-heading {
@@ -406,6 +420,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.carton-physical-details {
+  margin: 7px 0 0;
+  padding: 6px 7px;
+  border: 1px solid #e8e5ff;
+  border-radius: 5px;
+  color: #5f6680;
+  background: #f8f7ff;
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .expiry-date {

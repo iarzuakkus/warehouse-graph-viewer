@@ -77,6 +77,46 @@
   font-size: 10px;
 }
 
+.map-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.view-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #e1e6ee;
+  border-radius: 8px;
+  background: #f4f6fa;
+}
+
+.view-mode-switch button {
+  min-width: 38px;
+  height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  color: #64728a;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.view-mode-switch button:hover {
+  color: var(--accent);
+  background: rgb(99 91 255 / 7%);
+}
+
+.view-mode-switch button.active {
+  color: #ffffff;
+  background: var(--accent);
+  box-shadow: 0 3px 8px rgb(99 91 255 / 22%);
+}
+
 .map-stage {
   min-height: 0;
   padding: 10px;
@@ -113,6 +153,28 @@
 }
 
 .warehouse-canvas.is-dragging { cursor: grabbing; }
+
+.warehouse-3d-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #e5e9f0;
+  border-radius: 9px;
+  background: #f3f6fb;
+}
+
+.warehouse-3d-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.warehouse-3d-canvas canvas:active { cursor: grabbing; }
 
 .canvas-toolbar {
   position: absolute;

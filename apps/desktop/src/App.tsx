@@ -1,6 +1,9 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import { filterStorageHierarchy } from "@warehouse/domain";
+import {
+  filterStorageHierarchy,
+  type WarehouseRackScene,
+} from "@warehouse/domain";
 
 import { RackDetailsPanel } from "./components/RackDetailsPanel.js";
 import { sampleWarehouseMap } from "./sample-map.js";
@@ -12,14 +15,39 @@ import {
   useWarehouseRackDetail,
   type WarehouseRackDetailState,
 } from "./useWarehouseRackDetail.js";
+import { useWarehouseRackScene } from "./useWarehouseRackScene.js";
 import { useWarehouseRackSummaries } from "./useWarehouseRackSummaries.js";
+import {
+  Warehouse3DCanvas,
+  type Warehouse3DSelection,
+} from "./Warehouse3DCanvas.js";
 import { WarehouseCanvas } from "./WarehouseCanvas.js";
+
+type MapViewMode = "2d" | "3d";
 
 export function App() {
   const locationsState = useWarehouseLocations();
   const rackSummariesState = useWarehouseRackSummaries();
+  const rackSceneState = useWarehouseRackScene();
   const [aisleQuery, setAisleQuery] = useState("");
   const [selectedBayKey, setSelectedBayKey] = useState<string | null>(null);
+  const [selectedCartonId, setSelectedCartonId] = useState<number | null>(null);
+  const [mapViewMode, setMapViewMode] = useState<MapViewMode>("2d");
+  const handle3DSelect = useCallback(
+    (selection: Warehouse3DSelection | null): void => {
+      if (selection === null) {
+        setSelectedBayKey(null);
+        setSelectedCartonId(null);
+        return;
+      }
+
+      setSelectedBayKey(`${selection.aisleCode}/${selection.bayCode}`);
+      setSelectedCartonId(
+        selection.kind === "carton" ? selection.cartonId : null,
+      );
+    },
+    [],
+  );
   const visibleHierarchy = useMemo(
     () =>
       locationsState.status === "success"
@@ -33,6 +61,20 @@ export function App() {
     return aisle === undefined || bay === undefined ? null : { aisle, bay };
   }, [selectedBayKey]);
   const rackDetailState = useWarehouseRackDetail(selectedRack);
+  const rackSummaries =
+    rackSummariesState.status === "success"
+      ? rackSummariesState.summaries
+      : [];
+  const rackScene =
+    rackSceneState.status === "success" ? rackSceneState.racks : [];
+  const selectedSceneRack = useMemo(() => {
+    if (selectedRack === null) return null;
+    const selectedKey = rackKey(selectedRack.aisle, selectedRack.bay);
+    return (
+      rackScene.find((rack) => rackKey(rack.aisle, rack.bay) === selectedKey) ??
+      null
+    );
+  }, [rackScene, selectedRack]);
 
   return (
     <main className="app-shell">
@@ -57,32 +99,60 @@ export function App() {
                     onChange={(event) => {
                       setAisleQuery(event.target.value);
                       setSelectedBayKey(null);
+                      setSelectedCartonId(null);
                     }}
                   />
                 </label>
 
-                <div className="filter-summary">
-                  <Icon name="filter" />
-                  {visibleHierarchy === null
-                    ? "Veri bekleniyor"
-                    : `${visibleHierarchy.aisles.length} koridor`}
+                <div className="map-action-group">
+                  <div className="filter-summary">
+                    <Icon name="filter" />
+                    {visibleHierarchy === null
+                      ? "Veri bekleniyor"
+                      : `${visibleHierarchy.aisles.length} koridor`}
+                  </div>
+
+                  <div className="view-mode-switch" aria-label="Harita görünümü">
+                    <button
+                      type="button"
+                      className={mapViewMode === "2d" ? "active" : undefined}
+                      aria-pressed={mapViewMode === "2d"}
+                      onClick={() => setMapViewMode("2d")}
+                    >
+                      2D
+                    </button>
+                    <button
+                      type="button"
+                      className={mapViewMode === "3d" ? "active" : undefined}
+                      aria-pressed={mapViewMode === "3d"}
+                      onClick={() => setMapViewMode("3d")}
+                    >
+                      3D
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div className="map-stage">
-                <WarehouseCanvas
-                  map={sampleWarehouseMap}
-                  hierarchy={visibleHierarchy}
-                  rackSummaries={
-                    rackSummariesState.status === "success"
-                      ? rackSummariesState.summaries
-                      : []
-                  }
-                  selectedBayKey={selectedBayKey}
-                  onBaySelect={(aisleCode, bayCode) =>
-                    setSelectedBayKey(`${aisleCode}/${bayCode}`)
-                  }
-                />
+                {mapViewMode === "2d" ? (
+                  <WarehouseCanvas
+                    map={sampleWarehouseMap}
+                    hierarchy={visibleHierarchy}
+                    rackSummaries={rackSummaries}
+                    selectedBayKey={selectedBayKey}
+                    onBaySelect={(aisleCode, bayCode) => {
+                      setSelectedBayKey(`${aisleCode}/${bayCode}`);
+                      setSelectedCartonId(null);
+                    }}
+                  />
+                ) : (
+                  <Warehouse3DCanvas
+                    hierarchy={visibleHierarchy}
+                    rackSummaries={rackSummaries}
+                    rackScene={rackScene}
+                    onSelect={handle3DSelect}
+                  />
+                )}
               </div>
 
               <MapLegend />
@@ -94,7 +164,10 @@ export function App() {
                 {selectedBayKey !== null ? (
                   <button
                     type="button"
-                    onClick={() => setSelectedBayKey(null)}
+                    onClick={() => {
+                      setSelectedBayKey(null);
+                      setSelectedCartonId(null);
+                    }}
                     aria-label="Detayı kapat"
                   >
                     ×
@@ -104,7 +177,11 @@ export function App() {
 
               <LocationsStatus state={locationsState} />
 
-              <RackDetailContent state={rackDetailState} />
+              <RackDetailContent
+                state={rackDetailState}
+                sceneRack={selectedSceneRack}
+                selectedCartonId={selectedCartonId}
+              />
             </aside>
           </section>
         </div>
@@ -257,7 +334,15 @@ function MapLegend() {
   );
 }
 
-function RackDetailContent({ state }: { readonly state: WarehouseRackDetailState }) {
+function RackDetailContent({
+  state,
+  sceneRack,
+  selectedCartonId,
+}: {
+  readonly state: WarehouseRackDetailState;
+  readonly sceneRack: WarehouseRackScene | null;
+  readonly selectedCartonId: number | null;
+}) {
   if (state.status === "idle") return <EmptySelection />;
   if (state.status === "loading") {
     return <div className="detail-message"><span className="detail-spinner" /><strong>Raf detayı yükleniyor</strong></div>;
@@ -265,7 +350,19 @@ function RackDetailContent({ state }: { readonly state: WarehouseRackDetailState
   if (state.status === "error") {
     return <div className="detail-message error"><strong>Raf detayı alınamadı</strong><p>{state.message}</p></div>;
   }
-  return <RackDetailsPanel detail={state.detail} />;
+  return (
+    <RackDetailsPanel
+      detail={state.detail}
+      sceneRack={sceneRack}
+      selectedCartonId={selectedCartonId}
+    />
+  );
+}
+
+function rackKey(aisleCode: string, bayCode: string): string {
+  const aisle = aisleCode.replace(/^SYN-/i, "").toLocaleUpperCase("tr-TR");
+  const bay = bayCode.toLocaleUpperCase("tr-TR");
+  return `${aisle}/${bay}`;
 }
 
 function EmptySelection() {
