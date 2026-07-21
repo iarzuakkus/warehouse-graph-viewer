@@ -56,6 +56,11 @@ interface PhysicalRackLayout {
   readonly slotsPerLevel: number;
 }
 
+interface CameraViewState {
+  readonly position: readonly [number, number, number];
+  readonly target: readonly [number, number, number];
+}
+
 export function Warehouse3DCanvas({
   hierarchy,
   rackSummaries,
@@ -63,6 +68,7 @@ export function Warehouse3DCanvas({
   onSelect,
 }: Warehouse3DCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const cameraViewRef = useRef<CameraViewState | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -95,6 +101,12 @@ export function Warehouse3DCanvas({
       sceneModel.bounds.height / 3,
       sceneModel.bounds.depth / 2,
     );
+    const savedCameraView = cameraViewRef.current;
+    if (savedCameraView !== null) {
+      camera.position.fromArray(savedCameraView.position);
+      controls.target.fromArray(savedCameraView.target);
+      controls.update();
+    }
 
     addLighting(scene);
     addFloor(scene, sceneModel.bounds.width, sceneModel.bounds.depth);
@@ -145,6 +157,48 @@ export function Warehouse3DCanvas({
     renderer.domElement.addEventListener("pointerdown", handlePointerDown);
     renderer.domElement.addEventListener("pointerup", handlePointerUp);
 
+    const keyboardMoveDistance = Math.max(
+      0.25,
+      Math.max(sceneModel.bounds.width, sceneModel.bounds.depth) * 0.015,
+    );
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+
+      const key = event.key.toLocaleLowerCase("tr-TR");
+      if (!["w", "a", "s", "d", "q", "e"].includes(key)) return;
+
+      const distance = keyboardMoveDistance * (event.shiftKey ? 2.5 : 1);
+      const forward = new THREE.Vector3()
+        .subVectors(controls.target, camera.position)
+        .setY(0)
+        .normalize();
+      const right = new THREE.Vector3()
+        .crossVectors(forward, camera.up)
+        .normalize();
+      const movement = new THREE.Vector3();
+
+      if (key === "w") movement.addScaledVector(forward, distance);
+      if (key === "s") movement.addScaledVector(forward, -distance);
+      if (key === "a") movement.addScaledVector(right, -distance);
+      if (key === "d") movement.addScaledVector(right, distance);
+      if (key === "q") movement.y -= distance;
+      if (key === "e") movement.y += distance;
+
+      event.preventDefault();
+      camera.position.add(movement);
+      controls.target.add(movement);
+      controls.update();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
     const resize = (): void => {
       const width = Math.max(1, container.clientWidth);
       const height = Math.max(1, container.clientHeight);
@@ -162,9 +216,14 @@ export function Warehouse3DCanvas({
     });
 
     return () => {
+      cameraViewRef.current = {
+        position: camera.position.toArray(),
+        target: controls.target.toArray(),
+      };
       renderer.setAnimationLoop(null);
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       renderer.domElement.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("keydown", handleKeyDown);
       resizeObserver.disconnect();
       controls.dispose();
       disposeScene(scene);
@@ -194,6 +253,16 @@ function cartonSelection(object: THREE.Object3D): Warehouse3DCartonSelection {
     cartonNumber: String(object.userData.cartonNumber),
     cartonTypeCode: String(object.userData.cartonTypeCode),
   };
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement
+  );
 }
 
 function rackSelection(object: THREE.Object3D): Warehouse3DRackSelection {

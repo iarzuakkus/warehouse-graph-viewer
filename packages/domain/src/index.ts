@@ -56,3 +56,17 @@ export type {
   WarehouseRackSceneLocation,
   WarehouseRackSummary,
 } from "./storage-location.js";
+
+export type {
+  SimulationAssignmentStatus,
+  SimulationMetricSet,
+  SimulationMove,
+  SimulationMoveList,
+  SimulationObjectiveWeights,
+  SimulationPathPoint,
+  SimulationScenario,
+  SimulationScenarioInput,
+  SimulationScenarioParameters,
+  SimulationScenarioResult,
+  SimulationScenarioStatus,
+} from "./simulation.js";

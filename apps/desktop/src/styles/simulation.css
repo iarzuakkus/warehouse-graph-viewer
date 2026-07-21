@@ -1,0 +1,538 @@
+.simulation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.simulation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.simulation-header h1 {
+  margin: 0;
+  font-size: 27px;
+  letter-spacing: -0.025em;
+}
+
+.simulation-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.simulation-header button,
+.simulation-config button,
+.simulation-selection-row button,
+.simulation-step-controls button,
+.simulation-move-plan button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.simulation-header button:disabled,
+.simulation-config button:disabled,
+.simulation-selection-row button:disabled,
+.simulation-step-controls button:disabled,
+.simulation-move-plan button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.simulation-header .simulation-run-button {
+  min-width: 155px;
+  border-color: var(--accent);
+  color: var(--surface);
+  background: var(--accent);
+}
+
+.simulation-config {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.6fr) minmax(90px, 0.45fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.simulation-config label,
+.simulation-selection-row label,
+.simulation-algorithm {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.simulation-config label > span,
+.simulation-selection-row label > span,
+.simulation-algorithm > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulation-config input,
+.simulation-selection-row select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: none;
+  color: inherit;
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.simulation-config input:focus,
+.simulation-selection-row select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.simulation-algorithm {
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+
+.simulation-algorithm strong { font-size: 12px; }
+
+.simulation-config > button {
+  align-self: end;
+  min-width: 125px;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.simulation-objectives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.simulation-objectives label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.simulation-objectives input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.simulation-selection-row {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(170px, auto) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.simulation-selected-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+}
+
+.simulation-selected-status span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.simulation-selected-status span[data-status="completed"] {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, var(--surface));
+}
+
+.simulation-selected-status span[data-status="failed"] {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
+.simulation-selected-status small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulation-delete-button {
+  padding-inline: 13px;
+  color: var(--danger);
+}
+
+.simulation-inline-error {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: 8px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+  font-size: 11px;
+}
+
+.simulation-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.simulation-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.simulation-metric > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.simulation-metric strong {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  align-self: center;
+  font-size: 21px;
+}
+
+.simulation-metric small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simulation-metric[data-tone="positive"] strong { color: var(--success); }
+
+.simulation-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.simulation-scene-card,
+.simulation-inspector,
+.simulation-move-plan {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.simulation-scene-card {
+  overflow: hidden;
+}
+
+.simulation-scene-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.simulation-scene-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.simulation-scene-heading strong { font-size: 14px; }
+.simulation-scene-heading span { color: var(--muted); font-size: 10px; }
+
+.simulation-scene {
+  height: 500px;
+  min-height: 390px;
+  background: #f3f6fb;
+}
+
+.simulation-scene .warehouse-3d-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.simulation-step-controls {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 15px;
+  border-top: 1px solid var(--border);
+}
+
+.simulation-step-controls button { padding-inline: 13px; }
+.simulation-step-controls input { width: 100%; accent-color: var(--accent); }
+
+.simulation-inspector {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  padding: 17px;
+}
+
+.simulation-inspector h2,
+.simulation-move-plan h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.simulation-inspector > p,
+.simulation-move-plan > p {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.simulation-inspector > dl,
+.simulation-selected-move dl {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+
+.simulation-inspector dl > div,
+.simulation-selected-move dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.simulation-inspector dt,
+.simulation-selected-move dt {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulation-inspector dd,
+.simulation-selected-move dd {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.simulation-selected-move {
+  display: flex;
+  flex-direction: column;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface));
+}
+
+.simulation-selected-move > span,
+.simulation-selected-move > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulation-selected-move > strong {
+  margin-top: 5px;
+  font-size: 13px;
+}
+
+.simulation-selected-move > small { margin-top: 2px; }
+
+.simulation-selected-move.empty p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulation-selected-move ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 11px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.simulation-selected-move li {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: var(--surface);
+  font-size: 9px;
+}
+
+.simulation-move-plan {
+  padding: 16px;
+}
+
+.simulation-move-plan-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.simulation-move-plan-heading span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulation-inspector .simulation-move-plan {
+  margin-top: 16px;
+  padding: 13px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-soft) 22%, var(--surface));
+}
+
+.simulation-move-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 310px;
+  overflow-y: auto;
+  margin-top: 11px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 32%, var(--border)) transparent;
+}
+
+.simulation-move-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  text-align: left;
+  background: var(--surface);
+}
+
+.simulation-move-row:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 38%, var(--surface));
+}
+
+.simulation-move-row[data-selected="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.simulation-move-sequence {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.simulation-move-description {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.simulation-move-description strong,
+.simulation-move-description small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simulation-move-description strong { font-size: 10px; }
+.simulation-move-description small { color: var(--muted); font-size: 9px; }
+
+.simulation-move-distance {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.simulation-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.simulation-message strong { font-size: 13px; }
+.simulation-message p { color: var(--muted); font-size: 11px; }
+.simulation-message[data-tone="error"] strong { color: var(--danger); }
+
+@media (max-width: 1250px) {
+  .simulation-config {
+    grid-template-columns: minmax(200px, 1fr) 100px minmax(175px, 0.8fr) auto;
+  }
+
+  .simulation-workspace-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+
+@media (max-width: 980px) {
+  .simulation-config { grid-template-columns: minmax(180px, 1fr) 100px; }
+  .simulation-config > button { width: 100%; }
+  .simulation-workspace-grid { grid-template-columns: minmax(0, 1fr); }
+  .simulation-inspector { min-height: 240px; }
+}
+
+@media (max-width: 760px) {
+  .simulation-header { align-items: flex-start; }
+  .simulation-header h1 { font-size: 19px; }
+  .simulation-header .simulation-run-button { min-width: 125px; }
+  .simulation-config { grid-template-columns: minmax(0, 1fr); }
+  .simulation-selection-row { grid-template-columns: minmax(0, 1fr); }
+  .simulation-metrics { grid-template-columns: minmax(0, 1fr); }
+  .simulation-scene { height: 410px; }
+  .simulation-step-controls { grid-template-columns: auto minmax(80px, 1fr) auto; }
+}

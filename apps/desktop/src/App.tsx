@@ -7,6 +7,7 @@ import {
 
 import { RackDetailsPanel } from "./components/RackDetailsPanel.js";
 import { sampleWarehouseMap } from "./sample-map.js";
+import { SimulationPage } from "./SimulationPage.js";
 import {
   useWarehouseLocations,
   type WarehouseLocationsState,
@@ -24,6 +25,7 @@ import {
 import { WarehouseCanvas } from "./WarehouseCanvas.js";
 
 type MapViewMode = "2d" | "3d";
+type AppPage = "map" | "simulation";
 
 export function App() {
   const locationsState = useWarehouseLocations();
@@ -33,6 +35,7 @@ export function App() {
   const [selectedBayKey, setSelectedBayKey] = useState<string | null>(null);
   const [selectedCartonId, setSelectedCartonId] = useState<number | null>(null);
   const [mapViewMode, setMapViewMode] = useState<MapViewMode>("2d");
+  const [activePage, setActivePage] = useState<AppPage>("map");
   const handle3DSelect = useCallback(
     (selection: Warehouse3DSelection | null): void => {
       if (selection === null) {
@@ -67,6 +70,8 @@ export function App() {
       : [];
   const rackScene =
     rackSceneState.status === "success" ? rackSceneState.racks : [];
+  const warehouseHierarchy =
+    locationsState.status === "success" ? locationsState.hierarchy : null;
   const selectedSceneRack = useMemo(() => {
     if (selectedRack === null) return null;
     const selectedKey = rackKey(selectedRack.aisle, selectedRack.bay);
@@ -78,10 +83,12 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <Sidebar />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} />
 
       <section className="app-content">
-        <TopBar />
+        {activePage === "map" ? (
+          <>
+        <TopBar onOpenSimulation={() => setActivePage("simulation")} />
 
         <div className="page-content">
           <SummaryCards state={locationsState} />
@@ -190,12 +197,35 @@ export function App() {
           <span>Depo Optimizer</span>
           <span>Depo Haritası</span>
         </footer>
+          </>
+        ) : (
+          <>
+            <div className="page-content">
+              <SimulationPage
+                hierarchy={warehouseHierarchy}
+                rackSummaries={rackSummaries}
+                baselineScene={rackScene}
+              />
+            </div>
+
+            <footer className="app-footer">
+              <span>Depo Optimizer</span>
+              <span>Simülasyon</span>
+            </footer>
+          </>
+        )}
       </section>
     </main>
   );
 }
 
-function Sidebar() {
+function Sidebar({
+  activePage,
+  onNavigate,
+}: {
+  readonly activePage: AppPage;
+  readonly onNavigate: (page: AppPage) => void;
+}) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -204,9 +234,19 @@ function Sidebar() {
       </div>
 
       <nav className="main-nav" aria-label="Ana menü">
-        <NavItem icon="home" label="Genel Bakış" />
-        <NavItem icon="map" label="Depo Haritası" active />
-        <NavItem icon="simulation" label="Simülasyon" disabled />
+        <NavItem icon="home" label="Genel Bakış" disabled />
+        <NavItem
+          icon="map"
+          label="Depo Haritası"
+          active={activePage === "map"}
+          onClick={() => onNavigate("map")}
+        />
+        <NavItem
+          icon="simulation"
+          label="Simülasyon"
+          active={activePage === "simulation"}
+          onClick={() => onNavigate("simulation")}
+        />
         <NavItem icon="report" label="Raporlar" disabled />
         <NavItem icon="analysis" label="Analizler" disabled />
         <NavItem icon="settings" label="Ayarlar" disabled />
@@ -233,14 +273,22 @@ interface NavItemProps {
   readonly label: string;
   readonly active?: boolean;
   readonly disabled?: boolean;
+  readonly onClick?: () => void;
 }
 
-function NavItem({ icon, label, active = false, disabled = false }: NavItemProps) {
+function NavItem({
+  icon,
+  label,
+  active = false,
+  disabled = false,
+  onClick,
+}: NavItemProps) {
   return (
     <button
       className={active ? "nav-item active" : "nav-item"}
       type="button"
       disabled={disabled}
+      onClick={onClick}
     >
       <Icon name={icon} />
       <span>{label}</span>
@@ -248,7 +296,7 @@ function NavItem({ icon, label, active = false, disabled = false }: NavItemProps
   );
 }
 
-function TopBar() {
+function TopBar({ onOpenSimulation }: { readonly onOpenSimulation: () => void }) {
   return (
     <header className="top-bar">
       <div>
@@ -256,7 +304,11 @@ function TopBar() {
         <p>Depo düzenini görselleştirin ve analiz edin</p>
       </div>
       <div className="top-actions">
-        <button className="secondary-button" type="button" disabled>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onOpenSimulation}
+        >
           <Icon name="simulation" /> Simülasyon
         </button>
         <button className="primary-button" type="button" disabled>
@@ -440,3 +492,5 @@ function valueOf(value: number | undefined): string {
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 }).format(value);
 }
+
+// npm run dev:web --workspace @warehouse/desktop

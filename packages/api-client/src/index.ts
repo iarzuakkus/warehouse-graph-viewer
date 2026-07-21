@@ -18,3 +18,13 @@ export {
   mapWarehouseRackSummariesResponse,
   mapWarehouseRackResponse,
 } from "./warehouse-racks-api.js";
+
+export {
+  SimulationApiClient,
+  mapSimulationMoveListResponse,
+  mapSimulationMoveResponse,
+  mapSimulationScenarioResponse,
+  mapSimulationScenariosResponse,
+} from "./simulation-api.js";
+
+export type { FetchSimulation } from "./simulation-api.js";
