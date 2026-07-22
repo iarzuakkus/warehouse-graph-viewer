@@ -8,6 +8,8 @@ import type {
   WarehouseRackSummary,
 } from "@warehouse/domain";
 
+import { AppButton } from "./components/AppButton.js";
+import { AppIcon } from "./components/AppIcon.js";
 import { useSimulationWorkspace } from "./useSimulationWorkspace.js";
 import { Warehouse3DCanvas } from "./Warehouse3DCanvas.js";
 
@@ -98,9 +100,10 @@ export function SimulationPage({
           <h1>Simülasyon</h1>
           <p>Alternatif depo yerleşimlerini çalıştırın ve adım adım inceleyin.</p>
         </div>
-        <button
-          type="button"
+        <AppButton
           className="simulation-run-button"
+          icon="play"
+          variant="primary"
           disabled={scenario === null || scenario.status !== "pending" || busy}
           onClick={() => {
             if (scenario !== null) void workspace.runScenario(scenario.id);
@@ -109,7 +112,7 @@ export function SimulationPage({
           {state.busyAction === "running"
             ? "Simülasyon çalışıyor"
             : "Simülasyonu Çalıştır"}
-        </button>
+        </AppButton>
       </header>
 
       <form className="simulation-config" onSubmit={createScenario}>
@@ -143,9 +146,14 @@ export function SimulationPage({
           <span>Algoritma</span>
           <strong>Deterministik Slotting v1</strong>
         </div>
-        <button type="submit" disabled={busy || draft.name.trim().length === 0}>
+        <AppButton
+          type="submit"
+          icon="add"
+          variant="primary"
+          disabled={busy || draft.name.trim().length === 0}
+        >
           {state.busyAction === "creating" ? "Oluşturuluyor" : "Yeni Senaryo"}
-        </button>
+        </AppButton>
       </form>
 
       <section className="simulation-objectives" aria-label="Optimizasyon hedefleri">
@@ -220,16 +228,17 @@ export function SimulationPage({
             <small>%{formatNumber(scenario.progressPercent)} tamamlandı</small>
           </div>
         )}
-        <button
-          type="button"
+        <AppButton
           className="simulation-delete-button"
+          icon="trash"
+          variant="danger"
           disabled={scenario === null || busy}
           onClick={() => {
             if (scenario !== null) void workspace.deleteScenario(scenario.id);
           }}
         >
           Senaryoyu Sil
-        </button>
+        </AppButton>
       </div>
 
       {state.errorMessage === null ? null : (
@@ -274,13 +283,14 @@ export function SimulationPage({
             />
           </div>
           <div className="simulation-step-controls">
-            <button
-              type="button"
+            <AppButton
+              icon="arrow-left"
+              size="small"
               disabled={state.currentStep === 0 || busy}
               onClick={() => showStep(state.currentStep - 1)}
             >
               Önceki
-            </button>
+            </AppButton>
             <input
               type="range"
               min={0}
@@ -290,13 +300,15 @@ export function SimulationPage({
               aria-label="Simülasyon adımı"
               onChange={(event) => showStep(Number(event.target.value))}
             />
-            <button
-              type="button"
+            <AppButton
+              icon="arrow-right"
+              iconPosition="end"
+              size="small"
               disabled={state.currentStep >= maximumStep || busy}
               onClick={() => showStep(state.currentStep + 1)}
             >
               Sonraki
-            </button>
+            </AppButton>
           </div>
         </section>
 
@@ -453,6 +465,7 @@ function MovePlan({
                   ? "—"
                   : `${formatNumber(move.travelDistanceM)} m`}
               </span>
+              <AppIcon name="arrow-right" className="simulation-move-action-icon" />
             </button>
           ))}
         </div>

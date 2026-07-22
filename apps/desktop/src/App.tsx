@@ -5,8 +5,10 @@ import {
   type WarehouseRackScene,
 } from "@warehouse/domain";
 
+import { AppButton } from "./components/AppButton.js";
+import { AppIcon, type AppIconName } from "./components/AppIcon.js";
 import { RackDetailsPanel } from "./components/RackDetailsPanel.js";
-import { sampleWarehouseMap } from "./sample-map.js";
+import { DashboardPage } from "./DashboardPage.js";
 import { SimulationPage } from "./SimulationPage.js";
 import {
   useWarehouseLocations,
@@ -22,10 +24,8 @@ import {
   Warehouse3DCanvas,
   type Warehouse3DSelection,
 } from "./Warehouse3DCanvas.js";
-import { WarehouseCanvas } from "./WarehouseCanvas.js";
 
-type MapViewMode = "2d" | "3d";
-type AppPage = "map" | "simulation";
+type AppPage = "dashboard" | "map" | "simulation";
 
 export function App() {
   const locationsState = useWarehouseLocations();
@@ -34,8 +34,7 @@ export function App() {
   const [aisleQuery, setAisleQuery] = useState("");
   const [selectedBayKey, setSelectedBayKey] = useState<string | null>(null);
   const [selectedCartonId, setSelectedCartonId] = useState<number | null>(null);
-  const [mapViewMode, setMapViewMode] = useState<MapViewMode>("2d");
-  const [activePage, setActivePage] = useState<AppPage>("map");
+  const [activePage, setActivePage] = useState<AppPage>("dashboard");
   const handle3DSelect = useCallback(
     (selection: Warehouse3DSelection | null): void => {
       if (selection === null) {
@@ -86,7 +85,23 @@ export function App() {
       <Sidebar activePage={activePage} onNavigate={setActivePage} />
 
       <section className="app-content">
-        {activePage === "map" ? (
+        {activePage === "dashboard" ? (
+          <>
+            <div className="page-content">
+              <DashboardPage
+                locationsState={locationsState}
+                rackSummaries={rackSummaries}
+                rackScene={rackScene}
+                onNavigate={(page) => setActivePage(page)}
+              />
+            </div>
+
+            <footer className="app-footer">
+              <span>Depo Optimizer</span>
+              <span>Genel Bakış</span>
+            </footer>
+          </>
+        ) : activePage === "map" ? (
           <>
         <TopBar onOpenSimulation={() => setActivePage("simulation")} />
 
@@ -97,7 +112,7 @@ export function App() {
             <div className="map-card">
               <div className="map-actions">
                 <label className="search-field">
-                  <Icon name="search" />
+                  <AppIcon name="search" />
                   <input
                     type="search"
                     value={aisleQuery}
@@ -113,53 +128,21 @@ export function App() {
 
                 <div className="map-action-group">
                   <div className="filter-summary">
-                    <Icon name="filter" />
+                    <AppIcon name="filter" />
                     {visibleHierarchy === null
                       ? "Veri bekleniyor"
                       : `${visibleHierarchy.aisles.length} koridor`}
-                  </div>
-
-                  <div className="view-mode-switch" aria-label="Harita görünümü">
-                    <button
-                      type="button"
-                      className={mapViewMode === "2d" ? "active" : undefined}
-                      aria-pressed={mapViewMode === "2d"}
-                      onClick={() => setMapViewMode("2d")}
-                    >
-                      2D
-                    </button>
-                    <button
-                      type="button"
-                      className={mapViewMode === "3d" ? "active" : undefined}
-                      aria-pressed={mapViewMode === "3d"}
-                      onClick={() => setMapViewMode("3d")}
-                    >
-                      3D
-                    </button>
                   </div>
                 </div>
               </div>
 
               <div className="map-stage">
-                {mapViewMode === "2d" ? (
-                  <WarehouseCanvas
-                    map={sampleWarehouseMap}
-                    hierarchy={visibleHierarchy}
-                    rackSummaries={rackSummaries}
-                    selectedBayKey={selectedBayKey}
-                    onBaySelect={(aisleCode, bayCode) => {
-                      setSelectedBayKey(`${aisleCode}/${bayCode}`);
-                      setSelectedCartonId(null);
-                    }}
-                  />
-                ) : (
-                  <Warehouse3DCanvas
-                    hierarchy={visibleHierarchy}
-                    rackSummaries={rackSummaries}
-                    rackScene={rackScene}
-                    onSelect={handle3DSelect}
-                  />
-                )}
+                <Warehouse3DCanvas
+                  hierarchy={visibleHierarchy}
+                  rackSummaries={rackSummaries}
+                  rackScene={rackScene}
+                  onSelect={handle3DSelect}
+                />
               </div>
 
               <MapLegend />
@@ -177,7 +160,7 @@ export function App() {
                     }}
                     aria-label="Detayı kapat"
                   >
-                    ×
+                    <AppIcon name="close" />
                   </button>
                 ) : null}
               </div>
@@ -229,12 +212,17 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="brand">
-        <span className="brand-mark"><Icon name="warehouse" /></span>
+        <span className="brand-mark"><AppIcon name="warehouse" /></span>
         <span>Depo<br />Optimizer</span>
       </div>
 
       <nav className="main-nav" aria-label="Ana menü">
-        <NavItem icon="home" label="Genel Bakış" disabled />
+        <NavItem
+          icon="dashboard"
+          label="Genel Bakış"
+          active={activePage === "dashboard"}
+          onClick={() => onNavigate("dashboard")}
+        />
         <NavItem
           icon="map"
           label="Depo Haritası"
@@ -247,20 +235,20 @@ function Sidebar({
           active={activePage === "simulation"}
           onClick={() => onNavigate("simulation")}
         />
-        <NavItem icon="report" label="Raporlar" disabled />
-        <NavItem icon="analysis" label="Analizler" disabled />
+        <NavItem icon="reports" label="Raporlar" disabled />
+        <NavItem icon="analytics" label="Analizler" disabled />
         <NavItem icon="settings" label="Ayarlar" disabled />
       </nav>
 
       <div className="sidebar-spacer" />
 
       <button className="sidebar-action" type="button">
-        <Icon name="sun" />
+        <AppIcon name="sun" />
         <span>Açık Tema</span>
         <span>›</span>
       </button>
       <div className="profile-card">
-        <span className="avatar"><Icon name="user" /></span>
+        <span className="avatar"><AppIcon name="user" /></span>
         <div><strong>Yönetici</strong><small>Admin</small></div>
         <span>⌄</span>
       </div>
@@ -269,7 +257,7 @@ function Sidebar({
 }
 
 interface NavItemProps {
-  readonly icon: IconName;
+  readonly icon: AppIconName;
   readonly label: string;
   readonly active?: boolean;
   readonly disabled?: boolean;
@@ -290,7 +278,7 @@ function NavItem({
       disabled={disabled}
       onClick={onClick}
     >
-      <Icon name={icon} />
+      <AppIcon name={icon} />
       <span>{label}</span>
     </button>
   );
@@ -304,18 +292,23 @@ function TopBar({ onOpenSimulation }: { readonly onOpenSimulation: () => void })
         <p>Depo düzenini görselleştirin ve analiz edin</p>
       </div>
       <div className="top-actions">
-        <button
+        <AppButton
           className="secondary-button"
-          type="button"
+          icon="simulation"
           onClick={onOpenSimulation}
         >
-          <Icon name="simulation" /> Simülasyon
-        </button>
-        <button className="primary-button" type="button" disabled>
-          <span>+</span> Yeni Senaryo
-        </button>
+          Simülasyon
+        </AppButton>
+        <AppButton
+          className="primary-button"
+          icon="add"
+          variant="primary"
+          onClick={onOpenSimulation}
+        >
+          Yeni Senaryo
+        </AppButton>
         <div className="top-profile">
-          <span className="avatar"><Icon name="user" /></span>
+          <span className="avatar"><AppIcon name="user" /></span>
           <div><strong>Yönetici</strong><small>Admin</small></div>
         </div>
       </div>
@@ -357,7 +350,7 @@ function SummaryCards({ state }: SummaryCardsProps) {
 }
 
 interface SummaryCardProps {
-  readonly icon: IconName;
+  readonly icon: AppIconName;
   readonly label: string;
   readonly value: string;
   readonly note?: string | undefined;
@@ -367,7 +360,7 @@ interface SummaryCardProps {
 function SummaryCard({ icon, label, value, note, tone }: SummaryCardProps) {
   return (
     <article className="summary-card">
-      <span className="summary-icon"><Icon name={icon} /></span>
+      <span className="summary-icon"><AppIcon name={icon} /></span>
       <div><span>{label}</span><strong>{value}</strong></div>
       {note === undefined ? null : <small data-tone={tone}>{note}</small>}
     </article>
@@ -420,7 +413,7 @@ function rackKey(aisleCode: string, bayCode: string): string {
 function EmptySelection() {
   return (
     <div className="empty-selection">
-      <span><Icon name="map" /></span>
+      <span><AppIcon name="map" /></span>
       <strong>Bir raf seçin</strong>
       <p>Seviye, lokasyon ve kapasite bilgilerini görmek için haritadaki bir rafa tıklayın.</p>
     </div>
@@ -455,34 +448,6 @@ function StatusLine({ status, children }: { readonly status: string; readonly ch
       <strong>{children}</strong>
     </div>
   );
-}
-
-type IconName =
-  | "active" | "aisle" | "analysis" | "capacity" | "distance"
-  | "filter" | "home" | "location" | "map" | "report" | "search"
-  | "settings" | "simulation" | "sun" | "user" | "warehouse";
-
-function Icon({ name }: { readonly name: IconName }) {
-  const paths: Record<IconName, ReactNode> = {
-    active: <><path d="M12 3v12" /><path d="m8 11 4 4 4-4" /><path d="M5 16v3h14v-3" /></>,
-    aisle: <><path d="M5 19V7l4-3v15" /><path d="M15 19V4l4 3v12" /><path d="M2 19h20" /></>,
-    analysis: <><path d="M4 19V9" /><path d="M10 19V5" /><path d="M16 19v-7" /><path d="M22 19H2" /></>,
-    capacity: <><path d="M4 8h16v11H4z" /><path d="m8 8 1-4h6l1 4" /><path d="M9 13h6" /></>,
-    distance: <><circle cx="6" cy="18" r="2" /><circle cx="18" cy="6" r="2" /><path d="M7.5 16.5 16.5 7.5" /><path d="M8 6H4v4" /><path d="M16 18h4v-4" /></>,
-    filter: <path d="M4 6h16M7 12h10M10 18h4" />,
-    home: <><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></>,
-    location: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h5" /></>,
-    map: <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z" /><path d="M9 3v15M15 6v15" /></>,
-    report: <><path d="M6 2h9l4 4v16H6z" /><path d="M14 2v5h5M9 13h6M9 17h6" /></>,
-    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.5h-4L10.5 6A7 7 0 0 0 9 7L6.6 6.1l-2 3.4L6.7 11a7 7 0 0 0 0 2l-2 1.5 2 3.4L9 17a7 7 0 0 0 1.5 1l.3 2.5h4L15 18a7 7 0 0 0 1.5-1l2.4.9 2-3.4-2-1.5a7 7 0 0 0 .1-1Z" /></>,
-    simulation: <><path d="M6 19a9 9 0 1 1 12 0" /><path d="M9 22h6M12 13V7M9 10l3 3 3-3" /></>,
-    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
-    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
-    warehouse: <><path d="m3 9 9-6 9 6v12H3z" /><path d="M7 13h10v8H7zM9 16h6" /></>,
-  };
-
-  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
 function valueOf(value: number | undefined): string {
