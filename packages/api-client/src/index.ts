@@ -21,6 +21,8 @@ export {
 
 export {
   SimulationApiClient,
+  mapSimulationMoveBatchListResponse,
+  mapSimulationMoveBatchResponse,
   mapSimulationMoveListResponse,
   mapSimulationMoveResponse,
   mapSimulationScenarioResponse,

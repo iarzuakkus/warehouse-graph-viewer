@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SimulationApiClient } from "@warehouse/api-client";
 import type {
+  SimulationMoveBatchList,
   SimulationMoveList,
   SimulationScenario,
   SimulationScenarioInput,
@@ -23,6 +24,7 @@ export type SimulationWorkspaceState =
       readonly scenarios: readonly SimulationScenario[];
       readonly selectedScenario: SimulationScenario | null;
       readonly moves: SimulationMoveList | null;
+      readonly moveBatches: SimulationMoveBatchList | null;
       readonly scene: readonly WarehouseRackScene[];
       readonly currentStep: number;
       readonly busyAction: SimulationBusyAction | null;
@@ -35,6 +37,7 @@ export interface SimulationWorkspace {
   readonly selectScenario: (scenarioId: number) => Promise<void>;
   readonly runScenario: (scenarioId: number) => Promise<void>;
   readonly showStep: (scenarioId: number, step: number) => Promise<void>;
+  readonly showBatchStep: (scenarioId: number, step: number) => Promise<void>;
   readonly deleteScenario: (scenarioId: number) => Promise<void>;
 }
 
@@ -105,6 +108,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             ],
             selectedScenario: scenario,
             moves: null,
+            moveBatches: null,
             scene: [],
             currentStep: 0,
             busyAction: null,
@@ -138,6 +142,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             scenarios: replaceScenario(current.scenarios, scenario),
             selectedScenario: scenario,
             moves: bundle.moves,
+            moveBatches: bundle.moveBatches,
             scene: bundle.scene,
             currentStep: 0,
             busyAction: null,
@@ -171,6 +176,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             scenarios: replaceScenario(current.scenarios, scenario),
             selectedScenario: scenario,
             moves: bundle.moves,
+            moveBatches: bundle.moveBatches,
             scene: bundle.scene,
             currentStep: 0,
             busyAction: null,
@@ -214,6 +220,36 @@ export function useSimulationWorkspace(): SimulationWorkspace {
     [],
   );
 
+  const showBatchStep = useCallback(
+    async (scenarioId: number, step: number): Promise<void> => {
+      const requestSequence = beginAction(
+        setState,
+        requestSequenceRef,
+        "loading-step",
+      );
+      try {
+        const scene = await simulationClient.getBatchScene(scenarioId, step);
+        if (!isCurrentRequest(mountedRef, requestSequenceRef, requestSequence)) {
+          return;
+        }
+        setState((current) =>
+          current.status === "ready"
+            ? {
+                ...current,
+                scene,
+                currentStep: step,
+                busyAction: null,
+                errorMessage: null,
+              }
+            : current,
+        );
+      } catch (error: unknown) {
+        finishWithError(setState, mountedRef, requestSequenceRef, requestSequence, error);
+      }
+    },
+    [],
+  );
+
   const deleteScenario = useCallback(
     async (scenarioId: number): Promise<void> => {
       const requestSequence = beginAction(
@@ -234,6 +270,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             scenarios: current.scenarios.filter((item) => item.id !== scenarioId),
             selectedScenario: deletedSelection ? null : current.selectedScenario,
             moves: deletedSelection ? null : current.moves,
+            moveBatches: deletedSelection ? null : current.moveBatches,
             scene: deletedSelection ? [] : current.scene,
             currentStep: deletedSelection ? 0 : current.currentStep,
             busyAction: null,
@@ -253,6 +290,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
     selectScenario,
     runScenario,
     showStep,
+    showBatchStep,
     deleteScenario,
   };
 }
@@ -262,14 +300,18 @@ async function loadScenarioBundle(
   step: number,
 ): Promise<{
   readonly moves: SimulationMoveList | null;
+  readonly moveBatches: SimulationMoveBatchList | null;
   readonly scene: readonly WarehouseRackScene[];
 }> {
-  if (scenario.status !== "completed") return { moves: null, scene: [] };
-  const [moves, scene] = await Promise.all([
+  if (scenario.status !== "completed") {
+    return { moves: null, moveBatches: null, scene: [] };
+  }
+  const [moves, moveBatches, scene] = await Promise.all([
     simulationClient.getMoves(scenario.id),
-    simulationClient.getScenarioScene(scenario.id, step),
+    simulationClient.getMoveBatches(scenario.id),
+    simulationClient.getBatchScene(scenario.id, step),
   ]);
-  return { moves, scene };
+  return { moves, moveBatches, scene };
 }
 
 function readyState(
@@ -280,6 +322,7 @@ function readyState(
     scenarios,
     selectedScenario: null,
     moves: null,
+    moveBatches: null,
     scene: [],
     currentStep: 0,
     busyAction: null,

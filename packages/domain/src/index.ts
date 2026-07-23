@@ -59,8 +59,16 @@ export type {
 
 export type {
   SimulationAssignmentStatus,
+  SimulationEquipmentType,
   SimulationMetricSet,
   SimulationMove,
+  SimulationMoveBatch,
+  SimulationMoveBatchItem,
+  SimulationMoveBatchList,
+  SimulationMoveBatchStop,
+  SimulationMoveBatchStopType,
+  SimulationMoveBatchValidation,
+  SimulationMoveBatchValidationCode,
   SimulationMoveList,
   SimulationObjectiveWeights,
   SimulationPathPoint,

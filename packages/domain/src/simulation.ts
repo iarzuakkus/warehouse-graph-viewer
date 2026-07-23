@@ -7,6 +7,14 @@ export type SimulationScenarioStatus =
 
 export type SimulationAssignmentStatus = "placed" | "unplaced";
 
+export type SimulationEquipmentType = "cart" | "pallet_jack" | "forklift";
+
+export type SimulationMoveBatchStopType = "pickup" | "dropoff";
+
+export type SimulationMoveBatchValidationCode =
+  | "max_batch_weight_exceeded"
+  | "max_batch_volume_exceeded";
+
 export interface SimulationObjectiveWeights {
   readonly sameSkuLocation: number;
   readonly sameRack: number;
@@ -26,6 +34,10 @@ export interface SimulationScenarioParameters {
   readonly minimizeDispatchDistance: boolean;
   readonly minimizeMoves: boolean;
   readonly improveVolumeUtilization: boolean;
+  readonly equipmentType: SimulationEquipmentType;
+  readonly maxBatchWeightKg: number;
+  readonly maxBatchVolumeM3: number;
+  readonly maxCartonsPerBatch: number;
   readonly objectiveWeights: SimulationObjectiveWeights;
   readonly aisleFilter: readonly string[] | null;
   readonly levelFilter: readonly string[] | null;
@@ -111,4 +123,61 @@ export interface SimulationMoveList {
   readonly moveCount: number;
   readonly unplacedCount: number;
   readonly moves: readonly SimulationMove[];
+}
+
+export interface SimulationMoveBatchStop {
+  readonly sequence: number;
+  readonly type: SimulationMoveBatchStopType;
+  readonly locationId: number;
+  readonly cartonIds: readonly number[];
+}
+
+export interface SimulationMoveBatchItem {
+  readonly moveSequence: number;
+  readonly cartonId: number;
+  readonly cartonNumber: string;
+  readonly sku: string;
+  readonly weightKg: number;
+  readonly volumeM3: number;
+  readonly fromLocationId: number | null;
+  readonly toLocationId: number;
+}
+
+export interface SimulationMoveBatchValidation {
+  readonly moveSequence: number;
+  readonly cartonId: number;
+  readonly code: SimulationMoveBatchValidationCode;
+  readonly message: string;
+}
+
+export interface SimulationMoveBatch {
+  readonly sequence: number;
+  readonly equipmentType: SimulationEquipmentType;
+  readonly cartonCount: number;
+  readonly totalWeightKg: number;
+  readonly totalVolumeM3: number;
+  readonly estimatedDistanceM: number;
+  readonly estimatedDurationSeconds: number;
+  readonly capacityUtilizationPercent: number;
+  readonly moveSequences: readonly number[];
+  readonly items: readonly SimulationMoveBatchItem[];
+  readonly stops: readonly SimulationMoveBatchStop[];
+  readonly reasons: readonly string[];
+  readonly requiresStagingBuffer: boolean;
+}
+
+export interface SimulationMoveBatchList {
+  readonly scenarioId: number;
+  readonly equipmentType: SimulationEquipmentType;
+  readonly batchCount: number;
+  readonly cartonMoveCount: number;
+  readonly operationalDistanceM: number;
+  readonly individualDistanceM: number;
+  readonly estimatedDurationSeconds: number;
+  readonly capacityUtilizationPercent: number;
+  readonly requiresStagingBuffer: boolean;
+  readonly stagingMoveSequences: readonly number[];
+  readonly batches: readonly SimulationMoveBatch[];
+  readonly unbatchedItems: readonly SimulationMoveBatchItem[];
+  readonly validationErrors: readonly SimulationMoveBatchValidation[];
 }

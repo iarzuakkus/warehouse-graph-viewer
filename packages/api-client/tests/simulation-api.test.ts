@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ApiContractError,
   SimulationApiClient,
+  mapSimulationMoveBatchListResponse,
   mapSimulationMoveListResponse,
   mapSimulationScenarioResponse,
   type FetchSimulation,
@@ -34,6 +35,10 @@ const scenarioResponse = {
     minimize_dispatch_distance: true,
     minimize_moves: true,
     improve_volume_utilization: true,
+    equipment_type: "cart",
+    max_batch_weight_kg: "250",
+    max_batch_volume_m3: "1.2",
+    max_cartons_per_batch: 12,
     objective_weights: {
       same_sku_location: "8",
       same_rack: "4",
@@ -98,6 +103,52 @@ const moveResponse = {
   unplaced_reason: null,
 };
 
+const moveBatchItemResponse = {
+  move_sequence: 1,
+  carton_id: 205,
+  carton_number: "SYN-CARTON-0000205",
+  sku: "SYN-SKU-0017",
+  weight_kg: "42.50",
+  volume_m3: "0.125",
+  from_location_id: 10,
+  to_location_id: 22,
+};
+
+const moveBatchResponse = {
+  sequence: 1,
+  equipment_type: "cart",
+  carton_count: 1,
+  total_weight_kg: "42.50",
+  total_volume_m3: "0.125",
+  estimated_distance_m: "25.50",
+  estimated_duration_seconds: "31.25",
+  capacity_utilization_percent: "17.00",
+  move_sequences: [1],
+  items: [moveBatchItemResponse],
+  stops: [
+    { sequence: 1, type: "pickup", location_id: 10, carton_ids: [205] },
+    { sequence: 2, type: "dropoff", location_id: 22, carton_ids: [205] },
+  ],
+  reasons: ["same_sku_grouped"],
+  requires_staging_buffer: false,
+};
+
+const moveBatchListResponse = {
+  scenario_id: 12,
+  equipment_type: "cart",
+  batch_count: 1,
+  carton_move_count: 1,
+  operational_distance_m: "25.50",
+  individual_distance_m: "38.25",
+  estimated_duration_seconds: "31.25",
+  capacity_utilization_percent: "17.00",
+  requires_staging_buffer: false,
+  staging_move_sequences: [],
+  batches: [moveBatchResponse],
+  unbatched_items: [],
+  validation_errors: [],
+};
+
 const scenarioInput: SimulationScenarioInput = {
   name: "Haftalik yeniden yerlesim",
   seed: 42,
@@ -107,6 +158,10 @@ const scenarioInput: SimulationScenarioInput = {
   minimizeDispatchDistance: true,
   minimizeMoves: true,
   improveVolumeUtilization: true,
+  equipmentType: "cart",
+  maxBatchWeightKg: 250,
+  maxBatchVolumeM3: 1.2,
+  maxCartonsPerBatch: 12,
   objectiveWeights: {
     sameSkuLocation: 8,
     sameRack: 4,
@@ -131,6 +186,10 @@ describe("simulation response mapping", () => {
       progressPercent: 100,
       parameters: {
         groupSameSku: true,
+        equipmentType: "cart",
+        maxBatchWeightKg: 250,
+        maxBatchVolumeM3: 1.2,
+        maxCartonsPerBatch: 12,
         aisleFilter: ["SYN-A001"],
         objectiveWeights: { sameSkuLocation: 8, dispatchDistance: 7 },
       },
@@ -165,6 +224,71 @@ describe("simulation response mapping", () => {
     });
   });
 
+  it("maps operational move batches, items and stops", () => {
+    expect(mapSimulationMoveBatchListResponse(moveBatchListResponse)).toMatchObject({
+      scenarioId: 12,
+      equipmentType: "cart",
+      batchCount: 1,
+      cartonMoveCount: 1,
+      operationalDistanceM: 25.5,
+      individualDistanceM: 38.25,
+      capacityUtilizationPercent: 17,
+      batches: [{
+        sequence: 1,
+        cartonCount: 1,
+        totalWeightKg: 42.5,
+        totalVolumeM3: 0.125,
+        moveSequences: [1],
+        items: [{
+          moveSequence: 1,
+          cartonId: 205,
+          fromLocationId: 10,
+          toLocationId: 22,
+        }],
+        stops: [
+          { sequence: 1, type: "pickup", locationId: 10 },
+          { sequence: 2, type: "dropoff", locationId: 22 },
+        ],
+      }],
+    });
+  });
+
+  it("rejects unsupported batch values and inconsistent counts", () => {
+    expect(() => mapSimulationMoveBatchListResponse({
+      ...moveBatchListResponse,
+      equipment_type: "crane",
+    })).toThrow(ApiContractError);
+    expect(() => mapSimulationMoveBatchListResponse({
+      ...moveBatchListResponse,
+      batch_count: 2,
+    })).toThrow("batch_count does not match batches length");
+    expect(() => mapSimulationMoveBatchListResponse({
+      ...moveBatchListResponse,
+      carton_move_count: 2,
+    })).toThrow("carton_move_count does not match");
+    expect(() => mapSimulationMoveBatchListResponse({
+      ...moveBatchListResponse,
+      batches: [{
+        ...moveBatchResponse,
+        stops: [{
+          sequence: 1,
+          type: "wait",
+          location_id: 10,
+          carton_ids: [205],
+        }],
+      }],
+    })).toThrow(ApiContractError);
+    expect(() => mapSimulationMoveBatchListResponse({
+      ...moveBatchListResponse,
+      validation_errors: [{
+        move_sequence: 1,
+        carton_id: 205,
+        code: "unsupported_limit",
+        message: "Unsupported validation",
+      }],
+    })).toThrow(ApiContractError);
+  });
+
   it("rejects unsupported statuses and inconsistent move counts", () => {
     expect(() => mapSimulationScenarioResponse({
       ...scenarioResponse,
@@ -196,6 +320,10 @@ describe("SimulationApiClient", () => {
       name: "Haftalik yeniden yerlesim",
       algorithm_name: "deterministic_slotting_v1",
       group_same_sku: true,
+      equipment_type: "cart",
+      max_batch_weight_kg: 250,
+      max_batch_volume_m3: 1.2,
+      max_cartons_per_batch: 12,
       objective_weights: {
         same_sku_location: 8,
         dispatch_distance: 7,
@@ -205,10 +333,11 @@ describe("SimulationApiClient", () => {
     });
   });
 
-  it("uses run, stepped scene, moves, move detail and delete endpoints", async () => {
+  it("uses scenario, batch scene, move batch and delete endpoints", async () => {
     const fetchSimulation = vi
       .fn<FetchSimulation>()
       .mockResolvedValueOnce(response(scenarioResponse))
+      .mockResolvedValueOnce(response([]))
       .mockResolvedValueOnce(response([]))
       .mockResolvedValueOnce(response({
         scenario_id: 12,
@@ -217,24 +346,32 @@ describe("SimulationApiClient", () => {
         moves: [moveResponse],
       }))
       .mockResolvedValueOnce(response(moveResponse))
+      .mockResolvedValueOnce(response(moveBatchListResponse))
+      .mockResolvedValueOnce(response(moveBatchResponse))
       .mockResolvedValueOnce(response(null, 204));
     const client = new SimulationApiClient("/api", fetchSimulation);
 
     await client.runScenario(12);
     await client.getScenarioScene(12, 3);
+    await client.getBatchScene(12, 2);
     await client.getMoves(12);
     await client.getMove(12, 1);
+    await client.getMoveBatches(12);
+    await client.getMoveBatch(12, 1);
     await client.deleteScenario(12);
 
     expect(fetchSimulation.mock.calls.map(([url]) => url)).toEqual([
       "/api/simulation-scenarios/12/run",
       "/api/simulation-scenarios/12/scene?step=3",
+      "/api/simulation-scenarios/12/batch-scene?step=2",
       "/api/simulation-scenarios/12/moves",
       "/api/simulation-scenarios/12/moves/1",
+      "/api/simulation-scenarios/12/move-batches",
+      "/api/simulation-scenarios/12/move-batches/1",
       "/api/simulation-scenarios/12",
     ]);
     expect(fetchSimulation.mock.calls[0]?.[1]?.method).toBe("POST");
-    expect(fetchSimulation.mock.calls[4]?.[1]?.method).toBe("DELETE");
+    expect(fetchSimulation.mock.calls[7]?.[1]?.method).toBe("DELETE");
   });
 
   it("rejects invalid pagination, ids and steps before requesting", async () => {
@@ -245,6 +382,9 @@ describe("SimulationApiClient", () => {
     await expect(client.listScenarios(0, 101)).rejects.toThrow(RangeError);
     await expect(client.getScenario(0)).rejects.toThrow(RangeError);
     await expect(client.getScenarioScene(1, -1)).rejects.toThrow(RangeError);
+    await expect(client.getBatchScene(1, -1)).rejects.toThrow(RangeError);
+    await expect(client.getMoveBatches(0)).rejects.toThrow(RangeError);
+    await expect(client.getMoveBatch(1, 0)).rejects.toThrow(RangeError);
     expect(fetchSimulation).not.toHaveBeenCalled();
   });
 });

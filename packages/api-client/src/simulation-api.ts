@@ -1,7 +1,15 @@
 import type {
   SimulationAssignmentStatus,
+  SimulationEquipmentType,
   SimulationMetricSet,
   SimulationMove,
+  SimulationMoveBatch,
+  SimulationMoveBatchItem,
+  SimulationMoveBatchList,
+  SimulationMoveBatchStop,
+  SimulationMoveBatchStopType,
+  SimulationMoveBatchValidation,
+  SimulationMoveBatchValidationCode,
   SimulationMoveList,
   SimulationObjectiveWeights,
   SimulationPathPoint,
@@ -111,6 +119,21 @@ export class SimulationApiClient {
     return mapWarehouseRackSceneResponse(await response.json());
   }
 
+  async getBatchScene(
+    scenarioId: number,
+    step: number,
+  ): Promise<readonly WarehouseRackScene[]> {
+    requirePositiveId(scenarioId, "Scenario id");
+    if (!Number.isInteger(step) || step < 0) {
+      throw new RangeError("Batch step must be a non-negative integer.");
+    }
+    const response = await this.fetchSimulation(
+      `${this.baseUrl}/simulation-scenarios/${scenarioId}/batch-scene?step=${step}`,
+    );
+    ensureSuccessful(response);
+    return mapWarehouseRackSceneResponse(await response.json());
+  }
+
   async getMoves(scenarioId: number): Promise<SimulationMoveList> {
     requirePositiveId(scenarioId, "Scenario id");
     const response = await this.fetchSimulation(
@@ -128,6 +151,28 @@ export class SimulationApiClient {
     );
     ensureSuccessful(response);
     return mapSimulationMoveResponse(await response.json());
+  }
+
+  async getMoveBatches(scenarioId: number): Promise<SimulationMoveBatchList> {
+    requirePositiveId(scenarioId, "Scenario id");
+    const response = await this.fetchSimulation(
+      `${this.baseUrl}/simulation-scenarios/${scenarioId}/move-batches`,
+    );
+    ensureSuccessful(response);
+    return mapSimulationMoveBatchListResponse(await response.json());
+  }
+
+  async getMoveBatch(
+    scenarioId: number,
+    sequence: number,
+  ): Promise<SimulationMoveBatch> {
+    requirePositiveId(scenarioId, "Scenario id");
+    requirePositiveId(sequence, "Move batch sequence");
+    const response = await this.fetchSimulation(
+      `${this.baseUrl}/simulation-scenarios/${scenarioId}/move-batches/${sequence}`,
+    );
+    ensureSuccessful(response);
+    return mapSimulationMoveBatchResponse(await response.json());
   }
 
   async deleteScenario(scenarioId: number): Promise<void> {
@@ -174,6 +219,87 @@ export function mapSimulationMoveListResponse(value: unknown): SimulationMoveLis
 
 export function mapSimulationMoveResponse(value: unknown): SimulationMove {
   return mapMove(value, "move");
+}
+
+export function mapSimulationMoveBatchListResponse(
+  value: unknown,
+): SimulationMoveBatchList {
+  const response = requireRecord(value, "Simulation move batch list response");
+  const batches = requireArray(response.batches, "batches").map(
+    (batch, index) => mapMoveBatch(batch, `batches[${index}]`),
+  );
+  const unbatchedItems = requireArray(
+    response.unbatched_items,
+    "unbatched_items",
+  ).map((item, index) => mapMoveBatchItem(item, `unbatched_items[${index}]`));
+  const validationErrors = requireArray(
+    response.validation_errors,
+    "validation_errors",
+  ).map((validation, index) =>
+    mapMoveBatchValidation(validation, `validation_errors[${index}]`),
+  );
+  const result: SimulationMoveBatchList = {
+    scenarioId: requirePositiveInteger(response.scenario_id, "scenario_id"),
+    equipmentType: requireEquipmentType(
+      response.equipment_type,
+      "equipment_type",
+    ),
+    batchCount: requireNonNegativeInteger(response.batch_count, "batch_count"),
+    cartonMoveCount: requireNonNegativeInteger(
+      response.carton_move_count,
+      "carton_move_count",
+    ),
+    operationalDistanceM: requireNonNegativeNumber(
+      response.operational_distance_m,
+      "operational_distance_m",
+    ),
+    individualDistanceM: requireNonNegativeNumber(
+      response.individual_distance_m,
+      "individual_distance_m",
+    ),
+    estimatedDurationSeconds: requireNonNegativeNumber(
+      response.estimated_duration_seconds,
+      "estimated_duration_seconds",
+    ),
+    capacityUtilizationPercent: requireRangeNumber(
+      response.capacity_utilization_percent,
+      "capacity_utilization_percent",
+      0,
+      100,
+    ),
+    requiresStagingBuffer: requireBoolean(
+      response.requires_staging_buffer,
+      "requires_staging_buffer",
+    ),
+    stagingMoveSequences: requireArray(
+      response.staging_move_sequences,
+      "staging_move_sequences",
+    ).map((sequence, index) =>
+      requirePositiveInteger(sequence, `staging_move_sequences[${index}]`),
+    ),
+    batches,
+    unbatchedItems,
+    validationErrors,
+  };
+  if (result.batchCount !== batches.length) {
+    throw new ApiContractError("batch_count does not match batches length.");
+  }
+  const representedCartonCount = batches.reduce(
+    (sum, batch) => sum + batch.cartonCount,
+    unbatchedItems.length,
+  );
+  if (result.cartonMoveCount !== representedCartonCount) {
+    throw new ApiContractError(
+      "carton_move_count does not match batched and unbatched items.",
+    );
+  }
+  return result;
+}
+
+export function mapSimulationMoveBatchResponse(
+  value: unknown,
+): SimulationMoveBatch {
+  return mapMoveBatch(value, "move_batch");
 }
 
 function mapScenario(value: unknown, field: string): SimulationScenario {
@@ -236,6 +362,22 @@ function mapParameters(
     improveVolumeUtilization: requireBoolean(
       parameters.improve_volume_utilization,
       `${field}.improve_volume_utilization`,
+    ),
+    equipmentType: requireEquipmentType(
+      parameters.equipment_type,
+      `${field}.equipment_type`,
+    ),
+    maxBatchWeightKg: requirePositiveNumber(
+      parameters.max_batch_weight_kg,
+      `${field}.max_batch_weight_kg`,
+    ),
+    maxBatchVolumeM3: requirePositiveNumber(
+      parameters.max_batch_volume_m3,
+      `${field}.max_batch_volume_m3`,
+    ),
+    maxCartonsPerBatch: requirePositiveInteger(
+      parameters.max_cartons_per_batch,
+      `${field}.max_cartons_per_batch`,
     ),
     objectiveWeights: mapObjectiveWeights(
       parameters.objective_weights,
@@ -427,6 +569,146 @@ function mapMove(value: unknown, field: string): SimulationMove {
   };
 }
 
+function mapMoveBatch(value: unknown, field: string): SimulationMoveBatch {
+  const batch = requireRecord(value, field);
+  const items = requireArray(batch.items, `${field}.items`).map((item, index) =>
+    mapMoveBatchItem(item, `${field}.items[${index}]`),
+  );
+  const moveSequences = requireArray(
+    batch.move_sequences,
+    `${field}.move_sequences`,
+  ).map((sequence, index) =>
+    requirePositiveInteger(sequence, `${field}.move_sequences[${index}]`),
+  );
+  const result: SimulationMoveBatch = {
+    sequence: requirePositiveInteger(batch.sequence, `${field}.sequence`),
+    equipmentType: requireEquipmentType(
+      batch.equipment_type,
+      `${field}.equipment_type`,
+    ),
+    cartonCount: requirePositiveInteger(
+      batch.carton_count,
+      `${field}.carton_count`,
+    ),
+    totalWeightKg: requireNonNegativeNumber(
+      batch.total_weight_kg,
+      `${field}.total_weight_kg`,
+    ),
+    totalVolumeM3: requirePositiveNumber(
+      batch.total_volume_m3,
+      `${field}.total_volume_m3`,
+    ),
+    estimatedDistanceM: requireNonNegativeNumber(
+      batch.estimated_distance_m,
+      `${field}.estimated_distance_m`,
+    ),
+    estimatedDurationSeconds: requireNonNegativeNumber(
+      batch.estimated_duration_seconds,
+      `${field}.estimated_duration_seconds`,
+    ),
+    capacityUtilizationPercent: requireRangeNumber(
+      batch.capacity_utilization_percent,
+      `${field}.capacity_utilization_percent`,
+      0,
+      100,
+    ),
+    moveSequences,
+    items,
+    stops: requireArray(batch.stops, `${field}.stops`).map((stop, index) =>
+      mapMoveBatchStop(stop, `${field}.stops[${index}]`),
+    ),
+    reasons: requireStringArray(batch.reasons, `${field}.reasons`),
+    requiresStagingBuffer: requireBoolean(
+      batch.requires_staging_buffer,
+      `${field}.requires_staging_buffer`,
+    ),
+  };
+  if (result.cartonCount !== items.length) {
+    throw new ApiContractError(`${field}.carton_count does not match items.`);
+  }
+  const itemSequences = items.map((item) => item.moveSequence);
+  if (
+    new Set(moveSequences).size !== moveSequences.length
+    || moveSequences.length !== itemSequences.length
+    || moveSequences.some((sequence) => !itemSequences.includes(sequence))
+  ) {
+    throw new ApiContractError(
+      `${field}.move_sequences does not match item move sequences.`,
+    );
+  }
+  return result;
+}
+
+function mapMoveBatchItem(
+  value: unknown,
+  field: string,
+): SimulationMoveBatchItem {
+  const item = requireRecord(value, field);
+  return {
+    moveSequence: requirePositiveInteger(
+      item.move_sequence,
+      `${field}.move_sequence`,
+    ),
+    cartonId: requirePositiveInteger(item.carton_id, `${field}.carton_id`),
+    cartonNumber: requireString(
+      item.carton_number,
+      `${field}.carton_number`,
+    ),
+    sku: requireString(item.sku, `${field}.sku`),
+    weightKg: requireNonNegativeNumber(item.weight_kg, `${field}.weight_kg`),
+    volumeM3: requirePositiveNumber(item.volume_m3, `${field}.volume_m3`),
+    fromLocationId: requireNullablePositiveInteger(
+      item.from_location_id,
+      `${field}.from_location_id`,
+    ),
+    toLocationId: requirePositiveInteger(
+      item.to_location_id,
+      `${field}.to_location_id`,
+    ),
+  };
+}
+
+function mapMoveBatchStop(
+  value: unknown,
+  field: string,
+): SimulationMoveBatchStop {
+  const stop = requireRecord(value, field);
+  return {
+    sequence: requirePositiveInteger(stop.sequence, `${field}.sequence`),
+    type: requireMoveBatchStopType(stop.type, `${field}.type`),
+    locationId: requirePositiveInteger(
+      stop.location_id,
+      `${field}.location_id`,
+    ),
+    cartonIds: requireArray(stop.carton_ids, `${field}.carton_ids`).map(
+      (cartonId, index) =>
+        requirePositiveInteger(cartonId, `${field}.carton_ids[${index}]`),
+    ),
+  };
+}
+
+function mapMoveBatchValidation(
+  value: unknown,
+  field: string,
+): SimulationMoveBatchValidation {
+  const validation = requireRecord(value, field);
+  return {
+    moveSequence: requirePositiveInteger(
+      validation.move_sequence,
+      `${field}.move_sequence`,
+    ),
+    cartonId: requirePositiveInteger(
+      validation.carton_id,
+      `${field}.carton_id`,
+    ),
+    code: requireMoveBatchValidationCode(
+      validation.code,
+      `${field}.code`,
+    ),
+    message: requireString(validation.message, `${field}.message`),
+  };
+}
+
 function mapPathPoint(value: unknown, field: string): SimulationPathPoint {
   const point = requireRecord(value, field);
   return {
@@ -448,6 +730,10 @@ function mapScenarioInput(input: SimulationScenarioInput): unknown {
     minimize_dispatch_distance: input.minimizeDispatchDistance,
     minimize_moves: input.minimizeMoves,
     improve_volume_utilization: input.improveVolumeUtilization,
+    equipment_type: input.equipmentType,
+    max_batch_weight_kg: input.maxBatchWeightKg,
+    max_batch_volume_m3: input.maxBatchVolumeM3,
+    max_cartons_per_batch: input.maxCartonsPerBatch,
     objective_weights: {
       same_sku_location: input.objectiveWeights.sameSkuLocation,
       same_rack: input.objectiveWeights.sameRack,
@@ -531,6 +817,14 @@ function requireNonNegativeNumber(value: unknown, field: string): number {
   const number = requireNumber(value, field);
   if (number < 0) {
     throw new ApiContractError(`${field} must be non-negative.`);
+  }
+  return number;
+}
+
+function requirePositiveNumber(value: unknown, field: string): number {
+  const number = requireNumber(value, field);
+  if (number <= 0) {
+    throw new ApiContractError(`${field} must be positive.`);
   }
   return number;
 }
@@ -627,6 +921,39 @@ function requireAssignmentStatus(
   field: string,
 ): SimulationAssignmentStatus {
   if (value !== "placed" && value !== "unplaced") {
+    throw new ApiContractError(`${field} has an unsupported value.`);
+  }
+  return value;
+}
+
+function requireEquipmentType(
+  value: unknown,
+  field: string,
+): SimulationEquipmentType {
+  if (value !== "cart" && value !== "pallet_jack" && value !== "forklift") {
+    throw new ApiContractError(`${field} has an unsupported value.`);
+  }
+  return value;
+}
+
+function requireMoveBatchStopType(
+  value: unknown,
+  field: string,
+): SimulationMoveBatchStopType {
+  if (value !== "pickup" && value !== "dropoff") {
+    throw new ApiContractError(`${field} has an unsupported value.`);
+  }
+  return value;
+}
+
+function requireMoveBatchValidationCode(
+  value: unknown,
+  field: string,
+): SimulationMoveBatchValidationCode {
+  if (
+    value !== "max_batch_weight_exceeded"
+    && value !== "max_batch_volume_exceeded"
+  ) {
     throw new ApiContractError(`${field} has an unsupported value.`);
   }
   return value;

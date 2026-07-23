@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 import type {
-  SimulationMove,
+  SimulationEquipmentType,
+  SimulationMoveBatch,
+  SimulationMoveBatchList,
   SimulationScenarioInput,
   StorageHierarchy,
   WarehouseRackScene,
@@ -39,17 +41,17 @@ export function SimulationPage({
         return;
       }
 
-      const maximumStep = current.moves?.moveCount ?? 0;
+      const maximumStep = current.moveBatches?.batchCount ?? 0;
       if (event.key === "ArrowLeft" && current.currentStep > 0) {
         event.preventDefault();
-        void workspace.showStep(
+        void workspace.showBatchStep(
           current.selectedScenario.id,
           current.currentStep - 1,
         );
       }
       if (event.key === "ArrowRight" && current.currentStep < maximumStep) {
         event.preventDefault();
-        void workspace.showStep(
+        void workspace.showBatchStep(
           current.selectedScenario.id,
           current.currentStep + 1,
         );
@@ -58,7 +60,7 @@ export function SimulationPage({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [workspace.showStep, workspace.state]);
+  }, [workspace.showBatchStep, workspace.state]);
 
   if (workspace.state.status === "loading") {
     return <SimulationMessage title="Senaryolar yükleniyor" />;
@@ -75,11 +77,12 @@ export function SimulationPage({
 
   const state = workspace.state;
   const scenario = state.selectedScenario;
-  const result = scenario?.result ?? null;
-  const maximumStep = state.moves?.moveCount ?? 0;
-  const selectedMove = state.currentStep === 0
+  const maximumStep = state.moveBatches?.batchCount ?? 0;
+  const selectedBatch = state.currentStep === 0
     ? null
-    : state.moves?.moves[state.currentStep - 1] ?? null;
+    : state.moveBatches?.batches.find(
+        (batch) => batch.sequence === state.currentStep,
+      ) ?? null;
   const visibleScene = state.scene.length === 0 ? baselineScene : state.scene;
   const busy = state.busyAction !== null;
 
@@ -90,7 +93,7 @@ export function SimulationPage({
 
   const showStep = (step: number): void => {
     if (scenario === null || state.busyAction !== null) return;
-    void workspace.showStep(scenario.id, step);
+    void workspace.showBatchStep(scenario.id, step);
   };
 
   return (
@@ -248,20 +251,30 @@ export function SimulationPage({
       <section className="simulation-metrics" aria-label="Simülasyon özeti">
         <MetricCard
           label="Taşınacak Koli"
-          value={result === null ? "—" : formatNumber(result.proposed.movedCartonCount)}
-          detail={result === null ? "Senaryo çalıştırılmadı" : `${formatNumber(result.proposed.unplacedCartonCount)} yerleştirilemedi`}
-        />
-        <MetricCard
-          label="Ortalama Mesafe"
-          value={result === null ? "—" : `${formatNumber(result.proposed.averageDispatchDistance)} m`}
-          detail={result === null ? "Mevcut sonuç bekleniyor" : `${formatNumber(result.current.averageDispatchDistance)} m mevcut`}
-        />
-        <MetricCard
-          label="Beklenen İyileşme"
-          value={result?.objectiveImprovementPercent === null || result === null
+          value={state.moveBatches === null
             ? "—"
-            : `%${formatNumber(result.objectiveImprovementPercent)}`}
-          detail={result === null ? "Optimizasyon bekleniyor" : `${formatDuration(result.estimatedDurationSeconds)} tahmini süre`}
+            : formatNumber(state.moveBatches.cartonMoveCount)}
+          detail={state.moveBatches === null
+            ? "Senaryo çalıştırılmadı"
+            : `${formatNumber(state.moveBatches.batchCount)} taşıma partisi`}
+        />
+        <MetricCard
+          label="Operasyon Mesafesi"
+          value={state.moveBatches === null
+            ? "—"
+            : `${formatNumber(state.moveBatches.operationalDistanceM)} m`}
+          detail={state.moveBatches === null
+            ? "Mevcut sonuç bekleniyor"
+            : `${formatNumber(state.moveBatches.individualDistanceM)} m tekil taşıma`}
+        />
+        <MetricCard
+          label="Kapasite Kullanımı"
+          value={state.moveBatches === null
+            ? "—"
+            : `%${formatNumber(state.moveBatches.capacityUtilizationPercent)}`}
+          detail={state.moveBatches === null
+            ? "Operasyon planı bekleniyor"
+            : `${formatDuration(state.moveBatches.estimatedDurationSeconds)} tahmini süre`}
           tone="positive"
         />
       </section>
@@ -322,15 +335,29 @@ export function SimulationPage({
                 <SummaryRow label="Durum" value={scenarioStatusLabel(scenario.status)} />
                 <SummaryRow label="Algoritma" value={scenario.algorithmName} />
                 <SummaryRow label="Seed" value={formatNumber(scenario.seed)} />
-                <SummaryRow label="Toplam hareket" value={formatNumber(maximumStep)} />
                 <SummaryRow
-                  label="Hareket mesafesi"
-                  value={result === null ? "—" : `${formatNumber(result.totalMovementDistanceM)} m`}
+                  label="Ekipman"
+                  value={equipmentLabel(
+                    state.moveBatches?.equipmentType
+                      ?? scenario.parameters.equipmentType,
+                  )}
+                />
+                <SummaryRow label="Taşıma partisi" value={formatNumber(maximumStep)} />
+                <SummaryRow
+                  label="Toplam koli"
+                  value={formatNumber(state.moveBatches?.cartonMoveCount ?? 0)}
+                />
+                <SummaryRow
+                  label="Operasyon mesafesi"
+                  value={state.moveBatches === null
+                    ? "—"
+                    : `${formatNumber(state.moveBatches.operationalDistanceM)} m`}
                 />
               </dl>
-              <SelectedMove move={selectedMove} />
-              <MovePlan
-                moves={state.moves?.moves ?? []}
+              <BatchWarnings moveBatches={state.moveBatches} />
+              <SelectedBatch batch={selectedBatch} />
+              <BatchPlan
+                batches={state.moveBatches?.batches ?? []}
                 currentStep={state.currentStep}
                 disabled={busy}
                 onSelect={showStep}
@@ -388,47 +415,140 @@ function SummaryRow({ label, value }: { readonly label: string; readonly value: 
   return <div><dt>{label}</dt><dd>{value}</dd></div>;
 }
 
-function SelectedMove({ move }: { readonly move: SimulationMove | null }) {
-  if (move === null) {
+function BatchWarnings({
+  moveBatches,
+}: {
+  readonly moveBatches: SimulationMoveBatchList | null;
+}) {
+  if (
+    moveBatches === null
+    || (
+      !moveBatches.requiresStagingBuffer
+      && moveBatches.unbatchedItems.length === 0
+      && moveBatches.validationErrors.length === 0
+    )
+  ) {
+    return null;
+  }
+
+  return (
+    <section className="simulation-selected-move">
+      <strong>Operasyon uyarıları</strong>
+      <ul>
+        {moveBatches.requiresStagingBuffer ? (
+          <li>
+            Geçici bekletme alanı gerekli
+            {moveBatches.stagingMoveSequences.length === 0
+              ? null
+              : `: ${moveBatches.stagingMoveSequences.join(", ")}. hareketler`}
+          </li>
+        ) : null}
+        {moveBatches.unbatchedItems.length === 0 ? null : (
+          <li>{moveBatches.unbatchedItems.length} koli partiye alınamadı.</li>
+        )}
+        {moveBatches.validationErrors.map((validation) => (
+          <li key={`${validation.moveSequence}-${validation.cartonId}-${validation.code}`}>
+            {validation.message}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function SelectedBatch({
+  batch,
+}: {
+  readonly batch: SimulationMoveBatch | null;
+}) {
+  if (batch === null) {
     return (
       <section className="simulation-selected-move empty">
         <strong>Başlangıç yerleşimi</strong>
-        <p>Bir hareketi incelemek için adım seçin.</p>
+        <p>Bir taşıma partisini incelemek için adım seçin.</p>
       </section>
     );
   }
 
   return (
     <section className="simulation-selected-move">
-      <span>Adım {move.sequence}</span>
-      <strong>{move.cartonNumber}</strong>
-      <small>{move.sku}</small>
+      <span>Parti {batch.sequence}</span>
+      <strong>{equipmentLabel(batch.equipmentType)}</strong>
+      <small>{batch.cartonCount} koli · {batch.stops.length} durak</small>
       <dl>
-        <SummaryRow label="Kaynak" value={locationLabel(move.fromLocationId)} />
-        <SummaryRow label="Hedef" value={locationLabel(move.toLocationId)} />
         <SummaryRow
-          label="Mesafe"
-          value={move.travelDistanceM === null ? "—" : `${formatNumber(move.travelDistanceM)} m`}
+          label="Toplam ağırlık"
+          value={`${formatNumber(batch.totalWeightKg)} kg`}
         />
         <SummaryRow
-          label="Durum"
-          value={move.resultStatus === "placed" ? "Yerleştirildi" : "Yerleştirilemedi"}
+          label="Toplam hacim"
+          value={`${formatNumber(batch.totalVolumeM3)} m³`}
+        />
+        <SummaryRow
+          label="Kapasite kullanımı"
+          value={`%${formatNumber(batch.capacityUtilizationPercent)}`}
+        />
+        <SummaryRow
+          label="Operasyon mesafesi"
+          value={`${formatNumber(batch.estimatedDistanceM)} m`}
+        />
+        <SummaryRow
+          label="Tahmini süre"
+          value={formatDuration(batch.estimatedDurationSeconds)}
         />
       </dl>
-      {move.reasons.length === 0 ? null : (
-        <ul>{move.reasons.map((reason) => <li key={reason}>{reasonLabel(reason)}</li>)}</ul>
+      {batch.requiresStagingBuffer ? (
+        <p>Bu parti geçici bekletme alanı kullanıyor.</p>
+      ) : null}
+      {batch.stops.length === 0 ? null : (
+        <>
+          <strong>Duraklar</strong>
+          <ul>
+            {batch.stops.map((stop) => (
+              <li key={`${stop.sequence}-${stop.type}-${stop.locationId}`}>
+                {stop.sequence}. {stop.type === "pickup" ? "Alım" : "Bırakma"}
+                {" · "}{locationLabel(stop.locationId)}
+                {" · "}{stop.cartonIds.length} koli
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {batch.items.length === 0 ? null : (
+        <>
+          <strong>Partideki koliler</strong>
+          <ul>
+            {batch.items.map((item) => (
+              <li key={item.cartonId}>
+                <strong>{item.cartonNumber}</strong>
+                {" · "}{item.sku}
+                {" · "}{locationLabel(item.fromLocationId)}
+                {" → "}{locationLabel(item.toLocationId)}
+                {" · "}{formatNumber(item.weightKg)} kg
+                {" · "}{formatNumber(item.volumeM3)} m³
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {batch.reasons.length === 0 ? null : (
+        <ul>
+          {batch.reasons.map((reason) => (
+            <li key={reason}>{reasonLabel(reason)}</li>
+          ))}
+        </ul>
       )}
     </section>
   );
 }
 
-function MovePlan({
-  moves,
+function BatchPlan({
+  batches,
   currentStep,
   disabled,
   onSelect,
 }: {
-  readonly moves: readonly SimulationMove[];
+  readonly batches: readonly SimulationMoveBatch[];
   readonly currentStep: number;
   readonly disabled: boolean;
   readonly onSelect: (step: number) => void;
@@ -437,33 +557,33 @@ function MovePlan({
     <section className="simulation-move-plan">
       <div className="simulation-move-plan-heading">
         <h2>Taşıma Planı</h2>
-        <span>{moves.length} hareket</span>
+        <span>{batches.length} parti</span>
       </div>
-      {moves.length === 0 ? (
-        <p>Senaryo çalıştırıldığında önerilen hareketler burada görünecek.</p>
+      {batches.length === 0 ? (
+        <p>Senaryo çalıştırıldığında taşıma partileri burada görünecek.</p>
       ) : (
         <div className="simulation-move-list">
-          {moves.map((move) => (
+          {batches.map((batch) => (
             <button
               type="button"
               className="simulation-move-row"
-              key={move.id}
+              key={batch.sequence}
               disabled={disabled}
-              data-selected={move.sequence === currentStep}
-              aria-pressed={move.sequence === currentStep}
-              onClick={() => onSelect(move.sequence)}
+              data-selected={batch.sequence === currentStep}
+              aria-pressed={batch.sequence === currentStep}
+              onClick={() => onSelect(batch.sequence)}
             >
-              <span className="simulation-move-sequence">{move.sequence}</span>
+              <span className="simulation-move-sequence">{batch.sequence}</span>
               <span className="simulation-move-description">
-                <strong>{move.cartonNumber}</strong>
+                <strong>
+                  Parti {batch.sequence} · {equipmentLabel(batch.equipmentType)}
+                </strong>
                 <small>
-                  {locationLabel(move.fromLocationId)} → {locationLabel(move.toLocationId)}
+                  {batch.cartonCount} koli · {batch.stops.length} durak
                 </small>
               </span>
               <span className="simulation-move-distance">
-                {move.travelDistanceM === null
-                  ? "—"
-                  : `${formatNumber(move.travelDistanceM)} m`}
+                {formatNumber(batch.estimatedDistanceM)} m
               </span>
               <AppIcon name="arrow-right" className="simulation-move-action-icon" />
             </button>
@@ -501,6 +621,10 @@ function initialDraft(): SimulationScenarioInput {
     minimizeDispatchDistance: true,
     minimizeMoves: true,
     improveVolumeUtilization: true,
+    equipmentType: "cart",
+    maxBatchWeightKg: 250,
+    maxBatchVolumeM3: 1.2,
+    maxCartonsPerBatch: 12,
     objectiveWeights: {
       sameSkuLocation: 8,
       sameRack: 4,
@@ -527,6 +651,15 @@ function scenarioStatusLabel(status: string): string {
     cancelled: "İptal edildi",
   };
   return labels[status] ?? status;
+}
+
+function equipmentLabel(equipmentType: SimulationEquipmentType): string {
+  const labels: Record<SimulationEquipmentType, string> = {
+    cart: "Taşıma arabası",
+    pallet_jack: "Transpalet",
+    forklift: "Forklift",
+  };
+  return labels[equipmentType];
 }
 
 function reasonLabel(reason: string): string {
