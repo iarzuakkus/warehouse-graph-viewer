@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ApiContractError,
   SimulationApiClient,
+  mapSimulationBatchAnimationResponse,
   mapSimulationMoveBatchListResponse,
   mapSimulationMoveListResponse,
   mapSimulationScenarioResponse,
@@ -149,6 +150,120 @@ const moveBatchListResponse = {
   validation_errors: [],
 };
 
+const batchAnimationResponse = {
+  scenario_id: 12,
+  batch_sequence: 1,
+  equipment_type: "forklift",
+  source_scene_step: 0,
+  target_scene_step: 1,
+  route_distance_m: "30.00",
+  estimated_duration_seconds: "28.00",
+  events: [
+    {
+      sequence: 1,
+      type: "travel",
+      start_seconds: "0",
+      end_seconds: "4",
+      location_id: null,
+      carton_ids: [],
+      waypoints: [
+        {
+          sequence: 1,
+          node_id: "DISPATCH",
+          x_m: "0",
+          y_m: "0",
+          z_m: "0",
+          cumulative_distance_m: "0",
+          elapsed_seconds: "0",
+        },
+        {
+          sequence: 2,
+          node_id: "L-10",
+          x_m: "8",
+          y_m: "6",
+          z_m: "0",
+          cumulative_distance_m: "10",
+          elapsed_seconds: "4",
+        },
+      ],
+    },
+    {
+      sequence: 2,
+      type: "pickup",
+      start_seconds: "4",
+      end_seconds: "12",
+      location_id: 10,
+      carton_ids: [205],
+      waypoints: [],
+    },
+    {
+      sequence: 3,
+      type: "travel",
+      start_seconds: "12",
+      end_seconds: "16",
+      location_id: null,
+      carton_ids: [205],
+      waypoints: [
+        {
+          sequence: 1,
+          node_id: "L-10",
+          x_m: "8",
+          y_m: "6",
+          z_m: "0",
+          cumulative_distance_m: "10",
+          elapsed_seconds: "12",
+        },
+        {
+          sequence: 2,
+          node_id: "L-22",
+          x_m: "16",
+          y_m: "12",
+          z_m: "0",
+          cumulative_distance_m: "20",
+          elapsed_seconds: "16",
+        },
+      ],
+    },
+    {
+      sequence: 4,
+      type: "dropoff",
+      start_seconds: "16",
+      end_seconds: "24",
+      location_id: 22,
+      carton_ids: [205],
+      waypoints: [],
+    },
+    {
+      sequence: 5,
+      type: "travel",
+      start_seconds: "24",
+      end_seconds: "28",
+      location_id: null,
+      carton_ids: [],
+      waypoints: [
+        {
+          sequence: 1,
+          node_id: "L-22",
+          x_m: "16",
+          y_m: "12",
+          z_m: "0",
+          cumulative_distance_m: "20",
+          elapsed_seconds: "24",
+        },
+        {
+          sequence: 2,
+          node_id: "DISPATCH",
+          x_m: "0",
+          y_m: "0",
+          z_m: "0",
+          cumulative_distance_m: "30",
+          elapsed_seconds: "28",
+        },
+      ],
+    },
+  ],
+};
+
 const scenarioInput: SimulationScenarioInput = {
   name: "Haftalik yeniden yerlesim",
   seed: 42,
@@ -253,6 +368,96 @@ describe("simulation response mapping", () => {
     });
   });
 
+  it("maps batch animation events and timestamped waypoints", () => {
+    const animation = mapSimulationBatchAnimationResponse(
+      batchAnimationResponse,
+    );
+
+    expect(animation).toMatchObject({
+      scenarioId: 12,
+      batchSequence: 1,
+      equipmentType: "forklift",
+      sourceSceneStep: 0,
+      targetSceneStep: 1,
+      routeDistanceM: 30,
+      estimatedDurationSeconds: 28,
+    });
+    expect(animation.events).toHaveLength(5);
+    expect(animation.events[0]).toMatchObject({
+      sequence: 1,
+      type: "travel",
+      startSeconds: 0,
+      endSeconds: 4,
+      locationId: null,
+      waypoints: [
+        {
+          sequence: 1,
+          nodeId: "DISPATCH",
+          xM: 0,
+          yM: 0,
+          cumulativeDistanceM: 0,
+          elapsedSeconds: 0,
+        },
+        {
+          sequence: 2,
+          nodeId: "L-10",
+          xM: 8,
+          yM: 6,
+          cumulativeDistanceM: 10,
+          elapsedSeconds: 4,
+        },
+      ],
+    });
+    expect(animation.events[1]).toMatchObject({
+      sequence: 2,
+      type: "pickup",
+      locationId: 10,
+      cartonIds: [205],
+    });
+  });
+
+  it("rejects invalid batch animation contracts", () => {
+    expect(() => mapSimulationBatchAnimationResponse({
+      ...batchAnimationResponse,
+      events: [{
+        ...batchAnimationResponse.events[0]!,
+        type: "teleport",
+      }],
+    })).toThrow(ApiContractError);
+    expect(() => mapSimulationBatchAnimationResponse({
+      ...batchAnimationResponse,
+      events: [{
+        ...batchAnimationResponse.events[0]!,
+        start_seconds: "5",
+        end_seconds: "4",
+      }],
+    })).toThrow("end_seconds cannot precede start_seconds");
+    expect(() => mapSimulationBatchAnimationResponse({
+      ...batchAnimationResponse,
+      events: batchAnimationResponse.events.map((event, index) =>
+        index === 1 ? { ...event, sequence: 4 } : event
+      ),
+    })).toThrow("sequence must follow event order");
+    expect(() => mapSimulationBatchAnimationResponse({
+      ...batchAnimationResponse,
+      events: [{
+        ...batchAnimationResponse.events[0]!,
+        waypoints: batchAnimationResponse.events[0]!.waypoints.map(
+          (waypoint, index) =>
+            index === 1 ? { ...waypoint, sequence: 3 } : waypoint,
+        ),
+      }],
+    })).toThrow("sequence must follow waypoint order");
+    expect(() => mapSimulationBatchAnimationResponse({
+      ...batchAnimationResponse,
+      events: [{
+        ...batchAnimationResponse.events[1]!,
+        sequence: 1,
+        carton_ids: [205, 205],
+      }],
+    })).toThrow("carton_ids must be unique");
+  });
+
   it("rejects unsupported batch values and inconsistent counts", () => {
     expect(() => mapSimulationMoveBatchListResponse({
       ...moveBatchListResponse,
@@ -348,6 +553,7 @@ describe("SimulationApiClient", () => {
       .mockResolvedValueOnce(response(moveResponse))
       .mockResolvedValueOnce(response(moveBatchListResponse))
       .mockResolvedValueOnce(response(moveBatchResponse))
+      .mockResolvedValueOnce(response(batchAnimationResponse))
       .mockResolvedValueOnce(response(null, 204));
     const client = new SimulationApiClient("/api", fetchSimulation);
 
@@ -358,6 +564,7 @@ describe("SimulationApiClient", () => {
     await client.getMove(12, 1);
     await client.getMoveBatches(12);
     await client.getMoveBatch(12, 1);
+    await client.getBatchAnimation(12, 1);
     await client.deleteScenario(12);
 
     expect(fetchSimulation.mock.calls.map(([url]) => url)).toEqual([
@@ -368,10 +575,11 @@ describe("SimulationApiClient", () => {
       "/api/simulation-scenarios/12/moves/1",
       "/api/simulation-scenarios/12/move-batches",
       "/api/simulation-scenarios/12/move-batches/1",
+      "/api/simulation-scenarios/12/move-batches/1/animation",
       "/api/simulation-scenarios/12",
     ]);
     expect(fetchSimulation.mock.calls[0]?.[1]?.method).toBe("POST");
-    expect(fetchSimulation.mock.calls[7]?.[1]?.method).toBe("DELETE");
+    expect(fetchSimulation.mock.calls[8]?.[1]?.method).toBe("DELETE");
   });
 
   it("rejects invalid pagination, ids and steps before requesting", async () => {
@@ -385,6 +593,8 @@ describe("SimulationApiClient", () => {
     await expect(client.getBatchScene(1, -1)).rejects.toThrow(RangeError);
     await expect(client.getMoveBatches(0)).rejects.toThrow(RangeError);
     await expect(client.getMoveBatch(1, 0)).rejects.toThrow(RangeError);
+    await expect(client.getBatchAnimation(0, 1)).rejects.toThrow(RangeError);
+    await expect(client.getBatchAnimation(1, 0)).rejects.toThrow(RangeError);
     expect(fetchSimulation).not.toHaveBeenCalled();
   });
 });

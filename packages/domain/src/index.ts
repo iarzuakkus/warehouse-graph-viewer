@@ -59,6 +59,10 @@ export type {
 
 export type {
   SimulationAssignmentStatus,
+  SimulationBatchAnimation,
+  SimulationBatchAnimationEvent,
+  SimulationBatchAnimationEventType,
+  SimulationBatchAnimationWaypoint,
   SimulationEquipmentType,
   SimulationMetricSet,
   SimulationMove,

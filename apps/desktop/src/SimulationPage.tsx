@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import type {
+  SimulationBatchAnimation,
   SimulationEquipmentType,
   SimulationMoveBatch,
   SimulationMoveBatchList,
@@ -9,11 +10,18 @@ import type {
   WarehouseRackScene,
   WarehouseRackSummary,
 } from "@warehouse/domain";
+import {
+  calculateSimulationEquipmentPose,
+  type SimulationEquipmentPose,
+} from "@warehouse/rendering-3d";
 
 import { AppButton } from "./components/AppButton.js";
 import { AppIcon } from "./components/AppIcon.js";
 import { useSimulationWorkspace } from "./useSimulationWorkspace.js";
-import { Warehouse3DCanvas } from "./Warehouse3DCanvas.js";
+import {
+  Warehouse3DCanvas,
+  type Warehouse3DRoutePoint,
+} from "./Warehouse3DCanvas.js";
 
 interface SimulationPageProps {
   readonly hierarchy: StorageHierarchy | null;
@@ -28,6 +36,84 @@ export function SimulationPage({
 }: SimulationPageProps) {
   const workspace = useSimulationWorkspace();
   const [draft, setDraft] = useState<SimulationScenarioInput>(initialDraft);
+  const [selectedBatchSequence, setSelectedBatchSequence] = useState(0);
+  const [animationElapsedSeconds, setAnimationElapsedSeconds] = useState(0);
+  const [animationPlaybackRate, setAnimationPlaybackRate] = useState(1);
+  const [isAnimationPlaying, setIsAnimationPlaying] = useState(false);
+  const loadedAnimation = (
+    workspace.state.status === "ready"
+    && workspace.state.batchAnimation?.batchSequence === selectedBatchSequence
+  )
+    ? workspace.state.batchAnimation
+    : null;
+  const selectedScenarioId = workspace.state.status === "ready"
+    ? workspace.state.selectedScenario?.id ?? null
+    : null;
+  const equipmentCoordinateTransform = useMemo(
+    () => createEquipmentCoordinateTransform(
+      loadedAnimation,
+      hierarchy,
+      baselineScene,
+    ),
+    [baselineScene, hierarchy, loadedAnimation],
+  );
+  const equipmentRoute = useMemo(
+    () => createEquipmentRoute(
+      loadedAnimation,
+      equipmentCoordinateTransform,
+    ),
+    [equipmentCoordinateTransform, loadedAnimation],
+  );
+  const animationTimeCompression = loadedAnimation === null
+    ? 1
+    : calculateAnimationTimeCompression(loadedAnimation);
+
+  useEffect(() => {
+    setSelectedBatchSequence(0);
+    setAnimationElapsedSeconds(0);
+    setIsAnimationPlaying(false);
+  }, [selectedScenarioId]);
+
+  useEffect(() => {
+    setAnimationElapsedSeconds(0);
+    setIsAnimationPlaying(false);
+  }, [loadedAnimation?.batchSequence, loadedAnimation?.scenarioId]);
+
+  useEffect(() => {
+    if (!isAnimationPlaying || loadedAnimation === null) return;
+
+    const startedAt = performance.now();
+    const startingElapsedSeconds = animationElapsedSeconds;
+    let animationFrame = 0;
+    const tick = (timestamp: number): void => {
+      const nextElapsedSeconds = Math.min(
+        startingElapsedSeconds
+          + ((timestamp - startedAt) / 1_000)
+            * animationPlaybackRate
+            * animationTimeCompression,
+        loadedAnimation.estimatedDurationSeconds,
+      );
+      setAnimationElapsedSeconds(nextElapsedSeconds);
+      if (nextElapsedSeconds >= loadedAnimation.estimatedDurationSeconds) {
+        setIsAnimationPlaying(false);
+        void workspace.showBatchStep(
+          loadedAnimation.scenarioId,
+          loadedAnimation.targetSceneStep,
+        );
+        return;
+      }
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    animationFrame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [
+    animationPlaybackRate,
+    animationTimeCompression,
+    isAnimationPlaying,
+    loadedAnimation,
+    workspace.showBatchStep,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
@@ -36,31 +122,52 @@ export function SimulationPage({
       if (
         current.status !== "ready" ||
         current.selectedScenario === null ||
-        current.busyAction !== null
+        current.busyAction !== null ||
+        isAnimationPlaying
       ) {
         return;
       }
 
       const maximumStep = current.moveBatches?.batchCount ?? 0;
-      if (event.key === "ArrowLeft" && current.currentStep > 0) {
+      if (event.key === "ArrowLeft" && selectedBatchSequence > 0) {
         event.preventDefault();
-        void workspace.showBatchStep(
-          current.selectedScenario.id,
-          current.currentStep - 1,
+        const step = selectedBatchSequence - 1;
+        setSelectedBatchSequence(step);
+        setAnimationElapsedSeconds(0);
+        void workspace.showBatchStep(current.selectedScenario.id, step).then(
+          async () => {
+            if (step > 0) {
+              await workspace.loadBatchAnimation(
+                current.selectedScenario!.id,
+                step,
+              );
+            }
+          },
         );
       }
-      if (event.key === "ArrowRight" && current.currentStep < maximumStep) {
+      if (event.key === "ArrowRight" && selectedBatchSequence < maximumStep) {
         event.preventDefault();
-        void workspace.showBatchStep(
-          current.selectedScenario.id,
-          current.currentStep + 1,
+        const step = selectedBatchSequence + 1;
+        setSelectedBatchSequence(step);
+        setAnimationElapsedSeconds(0);
+        void workspace.showBatchStep(current.selectedScenario.id, step).then(
+          () => workspace.loadBatchAnimation(
+            current.selectedScenario!.id,
+            step,
+          ),
         );
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [workspace.showBatchStep, workspace.state]);
+  }, [
+    workspace.loadBatchAnimation,
+    workspace.showBatchStep,
+    workspace.state,
+    isAnimationPlaying,
+    selectedBatchSequence,
+  ]);
 
   if (workspace.state.status === "loading") {
     return <SimulationMessage title="Senaryolar yükleniyor" />;
@@ -78,13 +185,22 @@ export function SimulationPage({
   const state = workspace.state;
   const scenario = state.selectedScenario;
   const maximumStep = state.moveBatches?.batchCount ?? 0;
-  const selectedBatch = state.currentStep === 0
+  const selectedBatch = selectedBatchSequence === 0
     ? null
     : state.moveBatches?.batches.find(
-        (batch) => batch.sequence === state.currentStep,
+        (batch) => batch.sequence === selectedBatchSequence,
       ) ?? null;
   const visibleScene = state.scene.length === 0 ? baselineScene : state.scene;
   const busy = state.busyAction !== null;
+  const equipmentPose = loadedAnimation === null
+    ? null
+    : transformEquipmentPose(
+        calculateSimulationEquipmentPose(
+          loadedAnimation,
+          animationElapsedSeconds,
+        ),
+        equipmentCoordinateTransform,
+      );
 
   const createScenario = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -93,7 +209,35 @@ export function SimulationPage({
 
   const showStep = (step: number): void => {
     if (scenario === null || state.busyAction !== null) return;
-    void workspace.showBatchStep(scenario.id, step);
+    setIsAnimationPlaying(false);
+    setSelectedBatchSequence(step);
+    setAnimationElapsedSeconds(0);
+    void workspace.showBatchStep(scenario.id, step).then(async () => {
+      if (step > 0) {
+        await workspace.loadBatchAnimation(scenario.id, step);
+      }
+    });
+  };
+
+  const toggleAnimationPlayback = async (): Promise<void> => {
+    if (isAnimationPlaying) {
+      setIsAnimationPlaying(false);
+      return;
+    }
+    if (scenario === null || loadedAnimation === null || busy) return;
+
+    const startsFromBeginning = (
+      animationElapsedSeconds <= 0
+      || animationElapsedSeconds >= loadedAnimation.estimatedDurationSeconds
+    );
+    if (startsFromBeginning) {
+      setAnimationElapsedSeconds(0);
+      await workspace.showBatchStep(
+        scenario.id,
+        loadedAnimation.sourceSceneStep,
+      );
+    }
+    setIsAnimationPlaying(true);
   };
 
   return (
@@ -157,6 +301,67 @@ export function SimulationPage({
         >
           {state.busyAction === "creating" ? "Oluşturuluyor" : "Yeni Senaryo"}
         </AppButton>
+        <label>
+          <span>Ekipman</span>
+          <select
+            value={draft.equipmentType}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                equipmentType: event.target.value as SimulationEquipmentType,
+              }))
+            }
+          >
+            <option value="cart">Taşıma arabası</option>
+            <option value="pallet_jack">Transpalet</option>
+            <option value="forklift">Forklift</option>
+          </select>
+        </label>
+        <label>
+          <span>Maksimum ağırlık (kg)</span>
+          <input
+            type="number"
+            min={0.01}
+            step={0.01}
+            value={draft.maxBatchWeightKg}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                maxBatchWeightKg: Number(event.target.value),
+              }))
+            }
+          />
+        </label>
+        <label>
+          <span>Maksimum hacim (m³)</span>
+          <input
+            type="number"
+            min={0.01}
+            step={0.01}
+            value={draft.maxBatchVolumeM3}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                maxBatchVolumeM3: Number(event.target.value),
+              }))
+            }
+          />
+        </label>
+        <label>
+          <span>Parti başına maksimum koli</span>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={draft.maxCartonsPerBatch}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                maxCartonsPerBatch: Number(event.target.value),
+              }))
+            }
+          />
+        </label>
       </form>
 
       <section className="simulation-objectives" aria-label="Optimizasyon hedefleri">
@@ -286,21 +491,28 @@ export function SimulationPage({
               <strong>Yerleşim adımları</strong>
               <span>{scenario === null ? "Mevcut depo" : scenario.name}</span>
             </div>
-            <span>Adım {state.currentStep} / {maximumStep}</span>
+            <span>Adım {selectedBatchSequence} / {maximumStep}</span>
           </div>
           <div className="simulation-scene">
             <Warehouse3DCanvas
               hierarchy={hierarchy}
               rackSummaries={rackSummaries}
               rackScene={visibleScene}
+              equipmentPose={equipmentPose}
+              equipmentRoute={equipmentRoute}
+              equipmentType={
+                loadedAnimation?.equipmentType
+                  ?? scenario?.parameters.equipmentType
+                  ?? "cart"
+              }
             />
           </div>
           <div className="simulation-step-controls">
             <AppButton
               icon="arrow-left"
               size="small"
-              disabled={state.currentStep === 0 || busy}
-              onClick={() => showStep(state.currentStep - 1)}
+              disabled={selectedBatchSequence === 0 || busy || isAnimationPlaying}
+              onClick={() => showStep(selectedBatchSequence - 1)}
             >
               Önceki
             </AppButton>
@@ -308,8 +520,13 @@ export function SimulationPage({
               type="range"
               min={0}
               max={maximumStep}
-              value={state.currentStep}
-              disabled={scenario === null || maximumStep === 0 || busy}
+              value={selectedBatchSequence}
+              disabled={
+                scenario === null
+                || maximumStep === 0
+                || busy
+                || isAnimationPlaying
+              }
               aria-label="Simülasyon adımı"
               onChange={(event) => showStep(Number(event.target.value))}
             />
@@ -317,12 +534,60 @@ export function SimulationPage({
               icon="arrow-right"
               iconPosition="end"
               size="small"
-              disabled={state.currentStep >= maximumStep || busy}
-              onClick={() => showStep(state.currentStep + 1)}
+              disabled={
+                selectedBatchSequence >= maximumStep
+                || busy
+                || isAnimationPlaying
+              }
+              onClick={() => showStep(selectedBatchSequence + 1)}
             >
               Sonraki
             </AppButton>
           </div>
+          {loadedAnimation === null ? null : (
+            <div className="simulation-animation-controls">
+              <AppButton
+                size="small"
+                variant="primary"
+                disabled={busy && !isAnimationPlaying}
+                onClick={() => void toggleAnimationPlayback()}
+              >
+                {isAnimationPlaying ? "Duraklat" : "Animasyonu Oynat"}
+              </AppButton>
+              <input
+                type="range"
+                min={0}
+                max={loadedAnimation.estimatedDurationSeconds}
+                step={0.1}
+                value={animationElapsedSeconds}
+                aria-label="Animasyon zamanı"
+                onChange={(event) => {
+                  setIsAnimationPlaying(false);
+                  setAnimationElapsedSeconds(Number(event.target.value));
+                }}
+              />
+              <span>
+                {formatDuration(animationElapsedSeconds)}
+                {" / "}
+                {formatDuration(loadedAnimation.estimatedDurationSeconds)}
+                {` · ${formatNumber(animationTimeCompression)}x`}
+              </span>
+              <label>
+                <span>Demo hızı</span>
+                <select
+                  value={animationPlaybackRate}
+                  onChange={(event) =>
+                    setAnimationPlaybackRate(Number(event.target.value))
+                  }
+                >
+                  <option value={0.5}>0,5x</option>
+                  <option value={1}>1x</option>
+                  <option value={2}>2x</option>
+                  <option value={4}>4x</option>
+                </select>
+              </label>
+            </div>
+          )}
         </section>
 
         <aside className="simulation-inspector">
@@ -355,11 +620,15 @@ export function SimulationPage({
                 />
               </dl>
               <BatchWarnings moveBatches={state.moveBatches} />
-              <SelectedBatch batch={selectedBatch} />
+              <SelectedBatch
+                batch={selectedBatch}
+                animation={state.batchAnimation}
+                loading={state.busyAction === "loading-animation"}
+              />
               <BatchPlan
                 batches={state.moveBatches?.batches ?? []}
-                currentStep={state.currentStep}
-                disabled={busy}
+                currentStep={selectedBatchSequence}
+                disabled={busy || isAnimationPlaying}
                 onSelect={showStep}
               />
             </>
@@ -458,8 +727,12 @@ function BatchWarnings({
 
 function SelectedBatch({
   batch,
+  animation,
+  loading,
 }: {
   readonly batch: SimulationMoveBatch | null;
+  readonly animation: SimulationBatchAnimation | null;
+  readonly loading: boolean;
 }) {
   if (batch === null) {
     return (
@@ -469,6 +742,10 @@ function SelectedBatch({
       </section>
     );
   }
+
+  const selectedAnimation = animation?.batchSequence === batch.sequence
+    ? animation
+    : null;
 
   return (
     <section className="simulation-selected-move">
@@ -497,6 +774,32 @@ function SelectedBatch({
           value={formatDuration(batch.estimatedDurationSeconds)}
         />
       </dl>
+      {loading ? <p>Animasyon zaman çizelgesi yükleniyor.</p> : null}
+      {selectedAnimation === null ? null : (
+        <>
+          <strong>Animasyon</strong>
+          <dl>
+            <SummaryRow
+              label="Olay"
+              value={formatNumber(selectedAnimation.events.length)}
+            />
+            <SummaryRow
+              label="Rota"
+              value={`${formatNumber(selectedAnimation.routeDistanceM)} m`}
+            />
+            <SummaryRow
+              label="Süre"
+              value={formatDuration(
+                selectedAnimation.estimatedDurationSeconds,
+              )}
+            />
+            <SummaryRow
+              label="Sahne geçişi"
+              value={`${selectedAnimation.sourceSceneStep} → ${selectedAnimation.targetSceneStep}`}
+            />
+          </dl>
+        </>
+      )}
       {batch.requiresStagingBuffer ? (
         <p>Bu parti geçici bekletme alanı kullanıyor.</p>
       ) : null}
@@ -611,6 +914,212 @@ function SimulationMessage({
   );
 }
 
+interface EquipmentCoordinateTransform {
+  readonly scaleX: number;
+  readonly scaleZ: number;
+  readonly offsetX: number;
+  readonly offsetZ: number;
+}
+
+interface CoordinatePair {
+  readonly source: number;
+  readonly target: number;
+}
+
+const IDENTITY_EQUIPMENT_TRANSFORM: EquipmentCoordinateTransform = {
+  scaleX: 1,
+  scaleZ: 1,
+  offsetX: 0,
+  offsetZ: 0,
+};
+
+function createEquipmentCoordinateTransform(
+  animation: SimulationBatchAnimation | null,
+  hierarchy: StorageHierarchy | null,
+  rackScene: readonly WarehouseRackScene[],
+): EquipmentCoordinateTransform {
+  if (animation === null) {
+    return IDENTITY_EQUIPMENT_TRANSFORM;
+  }
+  if (usesPhysicalNavigationCoordinates(animation)) {
+    return IDENTITY_EQUIPMENT_TRANSFORM;
+  }
+  if (hierarchy === null) {
+    return IDENTITY_EQUIPMENT_TRANSFORM;
+  }
+
+  const outerMargin = 1.5;
+  const aisleGap = 2.5;
+  const bayGap = 0.35;
+  const rackWorldWidth = Math.max(
+    1.1,
+    ...rackScene.map((rack) => rack.depthCm / 100),
+  );
+  const rackWorldDepth = Math.max(
+    2.4,
+    ...rackScene.map((rack) => rack.widthCm / 100),
+  );
+  const rackCenters = new Map<string, { readonly x: number; readonly z: number }>();
+
+  hierarchy.aisles.forEach((aisle, aisleIndex) => {
+    aisle.bays.forEach((bay, bayIndex) => {
+      rackCenters.set(
+        rackCoordinateKey(aisle.code, bay.code),
+        {
+          x:
+            outerMargin
+            + rackWorldWidth / 2
+            + aisleIndex * (rackWorldWidth + aisleGap),
+          z:
+            outerMargin
+            + rackWorldDepth / 2
+            + bayIndex * (rackWorldDepth + bayGap),
+        },
+      );
+    });
+  });
+
+  const xPairs: CoordinatePair[] = [];
+  const zPairs: CoordinatePair[] = [];
+  for (const event of animation.events) {
+    for (const waypoint of event.waypoints) {
+      const rackCodes = parseRackWaypointNode(waypoint.nodeId);
+      if (rackCodes === null) continue;
+      const center = rackCenters.get(
+        rackCoordinateKey(rackCodes.aisle, rackCodes.bay),
+      );
+      if (center === undefined) continue;
+      xPairs.push({ source: waypoint.xM, target: center.x });
+      zPairs.push({ source: waypoint.yM, target: center.z });
+    }
+  }
+
+  const xTransform = fitAxisTransform(
+    xPairs,
+    (rackWorldWidth + aisleGap) / 20,
+  );
+  const zTransform = fitAxisTransform(
+    zPairs,
+    (rackWorldDepth + bayGap) / 3,
+  );
+
+  return {
+    scaleX: xTransform.scale,
+    offsetX: xTransform.offset,
+    scaleZ: zTransform.scale,
+    offsetZ: zTransform.offset,
+  };
+}
+
+function usesPhysicalNavigationCoordinates(
+  animation: SimulationBatchAnimation,
+): boolean {
+  return animation.events.some((event) =>
+    event.waypoints.some((waypoint) =>
+      /^(?:aisle|approach|cross_aisle):/i.test(waypoint.nodeId.trim())
+    )
+  );
+}
+
+function transformEquipmentPose(
+  pose: SimulationEquipmentPose | null,
+  transform: EquipmentCoordinateTransform,
+): SimulationEquipmentPose | null {
+  if (pose === null || pose.position === null) return pose;
+
+  const directionX = Math.sin(pose.headingRadians) * transform.scaleX;
+  const directionZ = Math.cos(pose.headingRadians) * transform.scaleZ;
+  return {
+    ...pose,
+    position: transformEquipmentPoint(pose.position, transform),
+    headingRadians: Math.atan2(directionX, directionZ),
+  };
+}
+
+function createEquipmentRoute(
+  animation: SimulationBatchAnimation | null,
+  transform: EquipmentCoordinateTransform,
+): readonly Warehouse3DRoutePoint[] {
+  if (animation === null) return [];
+
+  const route: Warehouse3DRoutePoint[] = [];
+  for (const event of animation.events) {
+    for (const waypoint of event.waypoints) {
+      const point = transformEquipmentPoint(
+        { x: waypoint.xM, y: waypoint.zM, z: waypoint.yM },
+        transform,
+      );
+      const previous = route[route.length - 1];
+      if (
+        previous !== undefined
+        && Math.hypot(previous.x - point.x, previous.z - point.z) < 1e-6
+      ) {
+        continue;
+      }
+      route.push(point);
+    }
+  }
+  return route;
+}
+
+function transformEquipmentPoint(
+  point: Warehouse3DRoutePoint,
+  transform: EquipmentCoordinateTransform,
+): Warehouse3DRoutePoint {
+  return {
+    x: point.x * transform.scaleX + transform.offsetX,
+    y: 0,
+    z: point.z * transform.scaleZ + transform.offsetZ,
+  };
+}
+
+function fitAxisTransform(
+  pairs: readonly CoordinatePair[],
+  fallbackScale: number,
+): { readonly scale: number; readonly offset: number } {
+  if (pairs.length === 0) {
+    return { scale: fallbackScale, offset: 0 };
+  }
+
+  const sourceMean = pairs.reduce(
+    (total, pair) => total + pair.source,
+    0,
+  ) / pairs.length;
+  const targetMean = pairs.reduce(
+    (total, pair) => total + pair.target,
+    0,
+  ) / pairs.length;
+  const sourceVariance = pairs.reduce(
+    (total, pair) => total + (pair.source - sourceMean) ** 2,
+    0,
+  );
+  const covariance = pairs.reduce(
+    (total, pair) =>
+      total + (pair.source - sourceMean) * (pair.target - targetMean),
+    0,
+  );
+  const scale = sourceVariance > 1e-9
+    ? covariance / sourceVariance
+    : fallbackScale;
+
+  return {
+    scale,
+    offset: targetMean - sourceMean * scale,
+  };
+}
+
+function parseRackWaypointNode(
+  nodeId: string,
+): { readonly aisle: string; readonly bay: string } | null {
+  const match = /^(?:pickup|dropoff):([^:]+):([^:]+)$/i.exec(nodeId.trim());
+  if (match?.[1] === undefined || match[2] === undefined) return null;
+  return { aisle: match[1], bay: match[2] };
+}
+
+function rackCoordinateKey(aisle: string, bay: string): string {
+  return `${aisle.trim().toLocaleUpperCase("tr-TR")}/${bay.trim().toLocaleUpperCase("tr-TR")}`;
+}
+
 function initialDraft(): SimulationScenarioInput {
   return {
     name: "Yeni yerleşim senaryosu",
@@ -677,6 +1186,19 @@ function reasonLabel(reason: string): string {
 
 function locationLabel(locationId: number | null): string {
   return locationId === null ? "Yerleştirilmedi" : `Lokasyon ${locationId}`;
+}
+
+function calculateAnimationTimeCompression(
+  animation: SimulationBatchAnimation,
+): number {
+  const targetDemoDurationSeconds = Math.min(
+    30,
+    Math.max(15, animation.events.length * 0.75),
+  );
+  return Math.max(
+    1,
+    animation.estimatedDurationSeconds / targetDemoDurationSeconds,
+  );
 }
 
 function formatDuration(seconds: number): string {

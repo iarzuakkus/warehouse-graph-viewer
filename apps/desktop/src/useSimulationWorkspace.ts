@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SimulationApiClient } from "@warehouse/api-client";
 import type {
+  SimulationBatchAnimation,
   SimulationMoveBatchList,
   SimulationMoveList,
   SimulationScenario,
@@ -12,6 +13,7 @@ import type {
 export type SimulationBusyAction =
   | "creating"
   | "deleting"
+  | "loading-animation"
   | "loading-scenario"
   | "loading-step"
   | "running";
@@ -25,6 +27,7 @@ export type SimulationWorkspaceState =
       readonly selectedScenario: SimulationScenario | null;
       readonly moves: SimulationMoveList | null;
       readonly moveBatches: SimulationMoveBatchList | null;
+      readonly batchAnimation: SimulationBatchAnimation | null;
       readonly scene: readonly WarehouseRackScene[];
       readonly currentStep: number;
       readonly busyAction: SimulationBusyAction | null;
@@ -38,6 +41,10 @@ export interface SimulationWorkspace {
   readonly runScenario: (scenarioId: number) => Promise<void>;
   readonly showStep: (scenarioId: number, step: number) => Promise<void>;
   readonly showBatchStep: (scenarioId: number, step: number) => Promise<void>;
+  readonly loadBatchAnimation: (
+    scenarioId: number,
+    sequence: number,
+  ) => Promise<void>;
   readonly deleteScenario: (scenarioId: number) => Promise<void>;
 }
 
@@ -109,6 +116,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             selectedScenario: scenario,
             moves: null,
             moveBatches: null,
+            batchAnimation: null,
             scene: [],
             currentStep: 0,
             busyAction: null,
@@ -143,6 +151,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             selectedScenario: scenario,
             moves: bundle.moves,
             moveBatches: bundle.moveBatches,
+            batchAnimation: null,
             scene: bundle.scene,
             currentStep: 0,
             busyAction: null,
@@ -177,6 +186,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             selectedScenario: scenario,
             moves: bundle.moves,
             moveBatches: bundle.moveBatches,
+            batchAnimation: null,
             scene: bundle.scene,
             currentStep: 0,
             busyAction: null,
@@ -250,6 +260,38 @@ export function useSimulationWorkspace(): SimulationWorkspace {
     [],
   );
 
+  const loadBatchAnimation = useCallback(
+    async (scenarioId: number, sequence: number): Promise<void> => {
+      const requestSequence = beginAction(
+        setState,
+        requestSequenceRef,
+        "loading-animation",
+      );
+      try {
+        const batchAnimation = await simulationClient.getBatchAnimation(
+          scenarioId,
+          sequence,
+        );
+        if (!isCurrentRequest(mountedRef, requestSequenceRef, requestSequence)) {
+          return;
+        }
+        setState((current) =>
+          current.status === "ready"
+            ? {
+                ...current,
+                batchAnimation,
+                busyAction: null,
+                errorMessage: null,
+              }
+            : current,
+        );
+      } catch (error: unknown) {
+        finishWithError(setState, mountedRef, requestSequenceRef, requestSequence, error);
+      }
+    },
+    [],
+  );
+
   const deleteScenario = useCallback(
     async (scenarioId: number): Promise<void> => {
       const requestSequence = beginAction(
@@ -271,6 +313,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
             selectedScenario: deletedSelection ? null : current.selectedScenario,
             moves: deletedSelection ? null : current.moves,
             moveBatches: deletedSelection ? null : current.moveBatches,
+            batchAnimation: deletedSelection ? null : current.batchAnimation,
             scene: deletedSelection ? [] : current.scene,
             currentStep: deletedSelection ? 0 : current.currentStep,
             busyAction: null,
@@ -291,6 +334,7 @@ export function useSimulationWorkspace(): SimulationWorkspace {
     runScenario,
     showStep,
     showBatchStep,
+    loadBatchAnimation,
     deleteScenario,
   };
 }
@@ -323,6 +367,7 @@ function readyState(
     selectedScenario: null,
     moves: null,
     moveBatches: null,
+    batchAnimation: null,
     scene: [],
     currentStep: 0,
     busyAction: null,

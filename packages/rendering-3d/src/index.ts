@@ -11,3 +11,11 @@ export type {
   WarehouseSceneModel,
   WarehouseSceneOptions,
 } from "./scene-model.js";
+
+export {
+  calculateSimulationEquipmentPose,
+} from "./simulation-animation.js";
+
+export type {
+  SimulationEquipmentPose,
+} from "./simulation-animation.js";

@@ -11,6 +11,13 @@ export type SimulationEquipmentType = "cart" | "pallet_jack" | "forklift";
 
 export type SimulationMoveBatchStopType = "pickup" | "dropoff";
 
+export type SimulationBatchAnimationEventType =
+  | "travel"
+  | "pickup"
+  | "dropoff"
+  | "staging_pickup"
+  | "staging_dropoff";
+
 export type SimulationMoveBatchValidationCode =
   | "max_batch_weight_exceeded"
   | "max_batch_volume_exceeded";
@@ -180,4 +187,35 @@ export interface SimulationMoveBatchList {
   readonly batches: readonly SimulationMoveBatch[];
   readonly unbatchedItems: readonly SimulationMoveBatchItem[];
   readonly validationErrors: readonly SimulationMoveBatchValidation[];
+}
+
+export interface SimulationBatchAnimationWaypoint {
+  readonly sequence: number;
+  readonly nodeId: string;
+  readonly xM: number;
+  readonly yM: number;
+  readonly zM: number;
+  readonly cumulativeDistanceM: number;
+  readonly elapsedSeconds: number;
+}
+
+export interface SimulationBatchAnimationEvent {
+  readonly sequence: number;
+  readonly type: SimulationBatchAnimationEventType;
+  readonly startSeconds: number;
+  readonly endSeconds: number;
+  readonly locationId: number | null;
+  readonly cartonIds: readonly number[];
+  readonly waypoints: readonly SimulationBatchAnimationWaypoint[];
+}
+
+export interface SimulationBatchAnimation {
+  readonly scenarioId: number;
+  readonly batchSequence: number;
+  readonly equipmentType: SimulationEquipmentType;
+  readonly sourceSceneStep: number;
+  readonly targetSceneStep: number;
+  readonly routeDistanceM: number;
+  readonly estimatedDurationSeconds: number;
+  readonly events: readonly SimulationBatchAnimationEvent[];
 }

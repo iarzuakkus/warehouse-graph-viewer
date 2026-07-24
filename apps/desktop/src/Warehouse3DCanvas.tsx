@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import type {
+  SimulationEquipmentType,
   StorageHierarchy,
   WarehouseRackScene,
   WarehouseRackSceneCarton,
@@ -12,13 +13,24 @@ import type {
 import {
   createWarehouseSceneModel,
   type RackSceneNode,
+  type SimulationEquipmentPose,
+  type WarehouseSceneModel,
 } from "@warehouse/rendering-3d";
 
 interface Warehouse3DCanvasProps {
   readonly hierarchy: StorageHierarchy | null;
   readonly rackSummaries: readonly WarehouseRackSummary[];
   readonly rackScene?: readonly WarehouseRackScene[];
+  readonly equipmentPose?: SimulationEquipmentPose | null;
+  readonly equipmentRoute?: readonly Warehouse3DRoutePoint[];
+  readonly equipmentType?: SimulationEquipmentType;
   readonly onSelect?: (selection: Warehouse3DSelection | null) => void;
+}
+
+export interface Warehouse3DRoutePoint {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
 }
 
 export interface Warehouse3DCartonSelection {
@@ -65,16 +77,25 @@ export function Warehouse3DCanvas({
   hierarchy,
   rackSummaries,
   rackScene = [],
+  equipmentPose = null,
+  equipmentRoute = [],
+  equipmentType = "cart",
   onSelect,
 }: Warehouse3DCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cameraViewRef = useRef<CameraViewState | null>(null);
+  const equipmentGroupRef = useRef<THREE.Group | null>(null);
+  const equipmentCargoSignatureRef = useRef("");
 
   useEffect(() => {
     const container = containerRef.current;
     if (container === null || hierarchy === null) return;
 
-    const sceneModel = createWarehouseSceneModel(hierarchy, rackSummaries);
+    const sceneModel = createNavigationAlignedSceneModel(
+      hierarchy,
+      rackSummaries,
+      rackScene,
+    );
     const sceneRacksByKey = new Map(
       rackScene.map((rack) => [rackKey(rack.aisle, rack.bay), rack]),
     );
@@ -110,6 +131,7 @@ export function Warehouse3DCanvas({
 
     addLighting(scene);
     addFloor(scene, sceneModel.bounds.width, sceneModel.bounds.depth);
+    addEquipmentRoute(scene, equipmentRoute);
     sceneModel.racks.forEach((rack) =>
       addRack(
         scene,
@@ -117,6 +139,11 @@ export function Warehouse3DCanvas({
         sceneRacksByKey.get(rackKey(rack.aisleCode, rack.bayCode)),
       ),
     );
+    const equipmentGroup = createEquipmentModel(equipmentType);
+    equipmentGroup.visible = false;
+    equipmentGroupRef.current = equipmentGroup;
+    equipmentCargoSignatureRef.current = "";
+    scene.add(equipmentGroup);
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -226,11 +253,53 @@ export function Warehouse3DCanvas({
       window.removeEventListener("keydown", handleKeyDown);
       resizeObserver.disconnect();
       controls.dispose();
+      if (equipmentGroupRef.current === equipmentGroup) {
+        equipmentGroupRef.current = null;
+        equipmentCargoSignatureRef.current = "";
+      }
       disposeScene(scene);
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, [hierarchy, onSelect, rackScene, rackSummaries]);
+  }, [
+    equipmentRoute,
+    equipmentType,
+    hierarchy,
+    onSelect,
+    rackScene,
+    rackSummaries,
+  ]);
+
+  useEffect(() => {
+    const equipmentGroup = equipmentGroupRef.current;
+    if (equipmentGroup === null) return;
+    const position = equipmentPose?.position;
+    if (position === null || position === undefined) {
+      equipmentGroup.visible = false;
+      return;
+    }
+
+    equipmentGroup.visible = true;
+    equipmentGroup.position.set(
+      position.x,
+      position.y,
+      position.z,
+    );
+    equipmentGroup.rotation.y = equipmentPose?.headingRadians ?? 0;
+  }, [equipmentPose, equipmentType]);
+
+  useEffect(() => {
+    const equipmentGroup = equipmentGroupRef.current;
+    if (equipmentGroup === null) return;
+    const cartonIds = equipmentPose?.carriedCartonIds ?? [];
+    const signature = `${equipmentType}:${cartonIds.join(",")}`;
+    if (equipmentCargoSignatureRef.current === signature) return;
+
+    const cargoGroup = equipmentGroup.getObjectByName("equipment-cargo");
+    if (!(cargoGroup instanceof THREE.Group)) return;
+    updateEquipmentCargo(cargoGroup, cartonIds, equipmentType);
+    equipmentCargoSignatureRef.current = signature;
+  }, [equipmentPose?.carriedCartonIds, equipmentType]);
 
   return (
     <div
@@ -336,6 +405,330 @@ function addFloor(scene: THREE.Scene, width: number, depth: number): void {
   scene.add(grid);
 }
 
+function addEquipmentRoute(
+  scene: THREE.Scene,
+  route: readonly Warehouse3DRoutePoint[],
+): void {
+  const points = route
+    .filter((point) =>
+      Number.isFinite(point.x)
+      && Number.isFinite(point.y)
+      && Number.isFinite(point.z)
+    )
+    .map((point) => new THREE.Vector3(point.x, 0.07, point.z));
+  if (points.length < 2) return;
+
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineDashedMaterial({
+    color: 0x6c5cff,
+    dashSize: 0.42,
+    gapSize: 0.24,
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+  });
+  const routeLine = new THREE.Line(geometry, material);
+  routeLine.computeLineDistances();
+  routeLine.renderOrder = 2;
+  scene.add(routeLine);
+
+  addRouteMarker(scene, points[0]!, 0x22c55e);
+  addRouteMarker(scene, points[points.length - 1]!, 0x6c5cff);
+}
+
+function addRouteMarker(
+  scene: THREE.Scene,
+  position: THREE.Vector3,
+  color: number,
+): void {
+  const marker = new THREE.Mesh(
+    new THREE.RingGeometry(0.14, 0.25, 28),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  marker.rotation.x = -Math.PI / 2;
+  marker.position.copy(position);
+  marker.position.y = 0.075;
+  marker.renderOrder = 3;
+  scene.add(marker);
+}
+
+function createEquipmentModel(
+  equipmentType: SimulationEquipmentType,
+): THREE.Group {
+  const model = equipmentType === "forklift"
+    ? createForkliftModel()
+    : equipmentType === "pallet_jack"
+      ? createPalletJackModel()
+      : createCartModel();
+  const cargoGroup = new THREE.Group();
+  cargoGroup.name = "equipment-cargo";
+  model.add(cargoGroup);
+  return model;
+}
+
+function updateEquipmentCargo(
+  cargoGroup: THREE.Group,
+  cartonIds: readonly number[],
+  equipmentType: SimulationEquipmentType,
+): void {
+  for (const child of [...cargoGroup.children]) {
+    cargoGroup.remove(child);
+    disposeObject(child);
+  }
+
+  const layout = equipmentCargoLayout(equipmentType);
+  const cartonsPerLayer = layout.columns * layout.rows;
+  cartonIds.forEach((cartonId, index) => {
+    const layer = Math.floor(index / cartonsPerLayer);
+    const indexInLayer = index % cartonsPerLayer;
+    const column = indexInLayer % layout.columns;
+    const row = Math.floor(indexInLayer / layout.columns);
+    const x =
+      (column - (layout.columns - 1) / 2)
+      * (layout.cartonWidth + layout.gap);
+    const z =
+      layout.centerZ
+      + (row - (layout.rows - 1) / 2)
+        * (layout.cartonDepth + layout.gap);
+    const y =
+      layout.baseY
+      + layout.cartonHeight / 2
+      + layer * (layout.cartonHeight + layout.gap);
+    const carton = addBox(
+      cargoGroup,
+      {
+        width: layout.cartonWidth,
+        height: layout.cartonHeight,
+        depth: layout.cartonDepth,
+      },
+      { x, y, z },
+      equipmentCartonColor(cartonId),
+      false,
+    );
+    carton.userData = { cartonId, kind: "equipment-cargo" };
+  });
+}
+
+function equipmentCargoLayout(
+  equipmentType: SimulationEquipmentType,
+): {
+  readonly baseY: number;
+  readonly centerZ: number;
+  readonly columns: number;
+  readonly rows: number;
+  readonly cartonWidth: number;
+  readonly cartonHeight: number;
+  readonly cartonDepth: number;
+  readonly gap: number;
+} {
+  if (equipmentType === "forklift") {
+    return {
+      baseY: 0.18,
+      centerZ: 1.22,
+      columns: 3,
+      rows: 2,
+      cartonWidth: 0.25,
+      cartonHeight: 0.24,
+      cartonDepth: 0.31,
+      gap: 0.025,
+    };
+  }
+  if (equipmentType === "pallet_jack") {
+    return {
+      baseY: 0.18,
+      centerZ: 0.45,
+      columns: 3,
+      rows: 2,
+      cartonWidth: 0.2,
+      cartonHeight: 0.2,
+      cartonDepth: 0.28,
+      gap: 0.025,
+    };
+  }
+  return {
+    baseY: 0.39,
+    centerZ: 0,
+    columns: 3,
+    rows: 2,
+    cartonWidth: 0.24,
+    cartonHeight: 0.22,
+    cartonDepth: 0.3,
+    gap: 0.025,
+  };
+}
+
+function equipmentCartonColor(cartonId: number): number {
+  const colors = [0xc98b45, 0xb97832, 0xd7a15d, 0xa96728] as const;
+  return colors[cartonId % colors.length]!;
+}
+
+function createForkliftModel(): THREE.Group {
+  const group = new THREE.Group();
+  const yellow = 0xf2b705;
+  const dark = 0x1f2937;
+  const steel = 0x475569;
+
+  addBox(
+    group,
+    { width: 1.1, height: 0.36, depth: 1.55 },
+    { x: 0, y: 0.4, z: -0.1 },
+    yellow,
+    true,
+  );
+  addBox(
+    group,
+    { width: 0.95, height: 0.72, depth: 0.62 },
+    { x: 0, y: 0.89, z: -0.52 },
+    yellow,
+    true,
+  );
+  for (const x of [-0.43, 0.43]) {
+    addBox(
+      group,
+      { width: 0.07, height: 1.28, depth: 0.07 },
+      { x, y: 1.16, z: 0.05 },
+      dark,
+      true,
+    );
+  }
+  addBox(
+    group,
+    { width: 0.94, height: 0.08, depth: 0.82 },
+    { x: 0, y: 1.82, z: -0.16 },
+    dark,
+    true,
+  );
+  for (const x of [-0.43, 0.43]) {
+    addBox(
+      group,
+      { width: 0.09, height: 1.7, depth: 0.09 },
+      { x, y: 1.02, z: 0.73 },
+      steel,
+      true,
+    );
+    addBox(
+      group,
+      { width: 0.12, height: 0.08, depth: 1.25 },
+      { x: x * 0.65, y: 0.13, z: 1.25 },
+      steel,
+      true,
+    );
+  }
+  addBox(
+    group,
+    { width: 0.95, height: 0.09, depth: 0.09 },
+    { x: 0, y: 1.76, z: 0.73 },
+    steel,
+    true,
+  );
+  addVehicleWheels(group, 0.57, 0.5, 0.28);
+  addVehicleWheels(group, 0.57, -0.58, 0.28);
+  group.name = "simulation-forklift";
+  return group;
+}
+
+function createPalletJackModel(): THREE.Group {
+  const group = new THREE.Group();
+  const yellow = 0xf2b705;
+  const dark = 0x334155;
+
+  for (const x of [-0.25, 0.25]) {
+    addBox(
+      group,
+      { width: 0.16, height: 0.1, depth: 1.35 },
+      { x, y: 0.12, z: 0.42 },
+      yellow,
+      true,
+    );
+  }
+  addBox(
+    group,
+    { width: 0.68, height: 0.32, depth: 0.42 },
+    { x: 0, y: 0.27, z: -0.45 },
+    yellow,
+    true,
+  );
+  addBox(
+    group,
+    { width: 0.08, height: 1.05, depth: 0.08 },
+    { x: 0, y: 0.82, z: -0.68 },
+    dark,
+    true,
+  );
+  addBox(
+    group,
+    { width: 0.46, height: 0.08, depth: 0.08 },
+    { x: 0, y: 1.33, z: -0.68 },
+    dark,
+    true,
+  );
+  addVehicleWheels(group, 0.33, -0.45, 0.15);
+  group.name = "simulation-pallet-jack";
+  return group;
+}
+
+function createCartModel(): THREE.Group {
+  const group = new THREE.Group();
+  const blue = 0x4f67d8;
+  const dark = 0x334155;
+
+  addBox(
+    group,
+    { width: 0.9, height: 0.16, depth: 1.25 },
+    { x: 0, y: 0.3, z: 0 },
+    blue,
+    true,
+  );
+  for (const x of [-0.4, 0.4]) {
+    addBox(
+      group,
+      { width: 0.06, height: 0.85, depth: 0.06 },
+      { x, y: 0.76, z: -0.58 },
+      dark,
+      true,
+    );
+  }
+  addBox(
+    group,
+    { width: 0.86, height: 0.06, depth: 0.06 },
+    { x: 0, y: 1.17, z: -0.58 },
+    dark,
+    true,
+  );
+  addVehicleWheels(group, 0.43, 0.46, 0.14);
+  addVehicleWheels(group, 0.43, -0.46, 0.14);
+  group.name = "simulation-cart";
+  return group;
+}
+
+function addVehicleWheels(
+  group: THREE.Group,
+  xOffset: number,
+  zOffset: number,
+  radius: number,
+): void {
+  for (const x of [-xOffset, xOffset]) {
+    const geometry = new THREE.CylinderGeometry(radius, radius, 0.14, 18);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x111827,
+      metalness: 0.18,
+      roughness: 0.78,
+    });
+    const wheel = new THREE.Mesh(geometry, material);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, radius, zOffset);
+    wheel.castShadow = true;
+    wheel.receiveShadow = true;
+    group.add(wheel);
+  }
+}
+
 function addRack(
   scene: THREE.Scene,
   rack: RackSceneNode,
@@ -403,6 +796,13 @@ function addRack(
   if (sceneRack !== undefined) {
     addRackCartons(rackGroup, rack, sceneRack, layout);
   }
+
+  for (const child of rackGroup.children) {
+    child.position.x -= rack.position.x;
+    child.position.z -= rack.position.z;
+  }
+  rackGroup.position.set(rack.position.x, 0, rack.position.z);
+  rackGroup.rotation.y = Math.PI / 2;
 
   scene.add(rackGroup);
 }
@@ -520,8 +920,8 @@ function createPhysicalRackLayout(
   if (sceneRack === undefined) {
     const levelCount = Math.max(1, rack.levelCount);
     return {
-      width: rack.size.width,
-      depth: rack.size.depth,
+      width: rack.size.depth,
+      depth: rack.size.width,
       height: rack.size.height,
       clearLevelHeight: rack.size.height / levelCount,
       frameThickness: 0.05,
@@ -562,6 +962,128 @@ function createPhysicalRackLayout(
     levelCount: sceneRack.levelCount,
     slotsPerLevel: sceneRack.slotsPerLevel,
   };
+}
+
+function createNavigationAlignedSceneModel(
+  hierarchy: StorageHierarchy,
+  rackSummaries: readonly WarehouseRackSummary[],
+  rackScene: readonly WarehouseRackScene[],
+): WarehouseSceneModel {
+  const driveAisleWidth = 3.5;
+  const crossAisleWidth = 4;
+  const rackGap = 0.2;
+  const boundaryPadding = 1;
+  const baseModel = createWarehouseSceneModel(hierarchy, rackSummaries);
+  const physicalSizes = new Map(
+    rackScene.map((rack) => [
+      rackKey(rack.aisle, rack.bay),
+      {
+        width: rack.widthCm / CENTIMETERS_PER_METER,
+        depth: rack.depthCm / CENTIMETERS_PER_METER,
+        height: rack.totalHeightCm / CENTIMETERS_PER_METER,
+      },
+    ]),
+  );
+  const sizeByRack = new Map(
+    baseModel.racks.map((rack) => [
+      rack.id,
+      physicalSizes.get(rackKey(rack.aisleCode, rack.bayCode)) ?? {
+        width: rack.size.width,
+        depth: rack.size.depth,
+        height: rack.size.height,
+      },
+    ]),
+  );
+  const aisleCodes = naturalSortedUnique(
+    baseModel.racks.map((rack) => rack.aisleCode),
+  );
+  const bayCodes = naturalSortedUnique(
+    baseModel.racks.map((rack) => rack.bayCode),
+  );
+  const aisleDepths = new Map(
+    aisleCodes.map((aisleCode) => [
+      aisleCode,
+      Math.max(
+        ...baseModel.racks
+          .filter((rack) => rack.aisleCode === aisleCode)
+          .map((rack) => sizeByRack.get(rack.id)!.depth),
+      ),
+    ]),
+  );
+  const bayWidths = new Map(
+    bayCodes.map((bayCode) => [
+      bayCode,
+      Math.max(
+        ...baseModel.racks
+          .filter((rack) => rack.bayCode === bayCode)
+          .map((rack) => sizeByRack.get(rack.id)!.width),
+      ),
+    ]),
+  );
+
+  const aisleMinimums = new Map<string, number>();
+  let nextX = driveAisleWidth;
+  for (const aisleCode of aisleCodes) {
+    aisleMinimums.set(aisleCode, nextX);
+    nextX += aisleDepths.get(aisleCode)! + driveAisleWidth;
+  }
+
+  const bayMinimums = new Map<string, number>();
+  let nextZ = crossAisleWidth;
+  for (const bayCode of bayCodes) {
+    bayMinimums.set(bayCode, nextZ);
+    nextZ += bayWidths.get(bayCode)! + rackGap;
+  }
+
+  const racks = baseModel.racks.map((rack) => {
+    const size = sizeByRack.get(rack.id)!;
+    const aisleMinimum = aisleMinimums.get(rack.aisleCode)!;
+    const bayMinimum = bayMinimums.get(rack.bayCode)!;
+    const bayWidth = bayWidths.get(rack.bayCode)!;
+    const rowOffset = (bayWidth - size.width) / 2;
+    return {
+      ...rack,
+      position: {
+        x: aisleMinimum + size.depth / 2,
+        y: size.height / 2,
+        z: bayMinimum + rowOffset + size.width / 2,
+      },
+      size: {
+        width: size.depth,
+        depth: size.width,
+        height: size.height,
+      },
+    };
+  });
+  const lastAisle = aisleCodes[aisleCodes.length - 1];
+  const lastBay = bayCodes[bayCodes.length - 1];
+
+  return {
+    racks,
+    bounds: {
+      width: lastAisle === undefined
+        ? boundaryPadding * 2
+        : aisleMinimums.get(lastAisle)!
+          + aisleDepths.get(lastAisle)!
+          + boundaryPadding,
+      depth: lastBay === undefined
+        ? crossAisleWidth * 2
+        : bayMinimums.get(lastBay)!
+          + bayWidths.get(lastBay)!
+          + crossAisleWidth,
+      height: Math.max(0, ...racks.map((rack) => rack.size.height)),
+    },
+  };
+}
+
+function naturalSortedUnique(values: readonly string[]): readonly string[] {
+  const collator = new Intl.Collator("en", {
+    numeric: true,
+    sensitivity: "base",
+  });
+  return [...new Set(values)].sort((first, second) =>
+    collator.compare(first, second)
+  );
 }
 
 function cartonSizeInMeters(carton: WarehouseRackSceneCarton): {
@@ -618,10 +1140,14 @@ function addBox(
 }
 
 function disposeScene(scene: THREE.Scene): void {
-  scene.traverse((object) => {
+  disposeObject(scene);
+}
+
+function disposeObject(root: THREE.Object3D): void {
+  root.traverse((object) => {
     if (
       !(object instanceof THREE.Mesh) &&
-      !(object instanceof THREE.LineSegments)
+      !(object instanceof THREE.Line)
     ) {
       return;
     }

@@ -1,5 +1,9 @@
 import type {
   SimulationAssignmentStatus,
+  SimulationBatchAnimation,
+  SimulationBatchAnimationEvent,
+  SimulationBatchAnimationEventType,
+  SimulationBatchAnimationWaypoint,
   SimulationEquipmentType,
   SimulationMetricSet,
   SimulationMove,
@@ -175,6 +179,19 @@ export class SimulationApiClient {
     return mapSimulationMoveBatchResponse(await response.json());
   }
 
+  async getBatchAnimation(
+    scenarioId: number,
+    sequence: number,
+  ): Promise<SimulationBatchAnimation> {
+    requirePositiveId(scenarioId, "Scenario id");
+    requirePositiveId(sequence, "Move batch sequence");
+    const response = await this.fetchSimulation(
+      `${this.baseUrl}/simulation-scenarios/${scenarioId}/move-batches/${sequence}/animation`,
+    );
+    ensureSuccessful(response);
+    return mapSimulationBatchAnimationResponse(await response.json());
+  }
+
   async deleteScenario(scenarioId: number): Promise<void> {
     requirePositiveId(scenarioId, "Scenario id");
     const response = await this.fetchSimulation(
@@ -300,6 +317,48 @@ export function mapSimulationMoveBatchResponse(
   value: unknown,
 ): SimulationMoveBatch {
   return mapMoveBatch(value, "move_batch");
+}
+
+export function mapSimulationBatchAnimationResponse(
+  value: unknown,
+): SimulationBatchAnimation {
+  const response = requireRecord(value, "Simulation batch animation response");
+  const events = requireArray(response.events, "events").map((event, index) =>
+    mapBatchAnimationEvent(event, `events[${index}]`),
+  );
+  if (events.length === 0) {
+    throw new ApiContractError("events must contain at least one event.");
+  }
+  validateAnimationEvents(events);
+
+  return {
+    scenarioId: requirePositiveInteger(response.scenario_id, "scenario_id"),
+    batchSequence: requirePositiveInteger(
+      response.batch_sequence,
+      "batch_sequence",
+    ),
+    equipmentType: requireEquipmentType(
+      response.equipment_type,
+      "equipment_type",
+    ),
+    sourceSceneStep: requireNonNegativeInteger(
+      response.source_scene_step,
+      "source_scene_step",
+    ),
+    targetSceneStep: requirePositiveInteger(
+      response.target_scene_step,
+      "target_scene_step",
+    ),
+    routeDistanceM: requireNonNegativeNumber(
+      response.route_distance_m,
+      "route_distance_m",
+    ),
+    estimatedDurationSeconds: requireNonNegativeNumber(
+      response.estimated_duration_seconds,
+      "estimated_duration_seconds",
+    ),
+    events,
+  };
 }
 
 function mapScenario(value: unknown, field: string): SimulationScenario {
@@ -709,6 +768,135 @@ function mapMoveBatchValidation(
   };
 }
 
+function mapBatchAnimationEvent(
+  value: unknown,
+  field: string,
+): SimulationBatchAnimationEvent {
+  const event = requireRecord(value, field);
+  const startSeconds = requireNonNegativeNumber(
+    event.start_seconds,
+    `${field}.start_seconds`,
+  );
+  const endSeconds = requireNonNegativeNumber(
+    event.end_seconds,
+    `${field}.end_seconds`,
+  );
+  if (endSeconds < startSeconds) {
+    throw new ApiContractError(
+      `${field}.end_seconds cannot precede start_seconds.`,
+    );
+  }
+  const type = requireBatchAnimationEventType(
+    event.type,
+    `${field}.type`,
+  );
+  const cartonIds = requireArray(
+    event.carton_ids,
+    `${field}.carton_ids`,
+  ).map((cartonId, index) =>
+    requirePositiveInteger(cartonId, `${field}.carton_ids[${index}]`),
+  );
+  if (new Set(cartonIds).size !== cartonIds.length) {
+    throw new ApiContractError(`${field}.carton_ids must be unique.`);
+  }
+  const waypoints = requireArray(
+    event.waypoints,
+    `${field}.waypoints`,
+  ).map((waypoint, index) =>
+    mapBatchAnimationWaypoint(waypoint, `${field}.waypoints[${index}]`),
+  );
+  if (type === "travel" && waypoints.length === 0) {
+    throw new ApiContractError(
+      `${field}.waypoints must not be empty for a travel event.`,
+    );
+  }
+  validateAnimationWaypoints(waypoints, field);
+
+  return {
+    sequence: requirePositiveInteger(event.sequence, `${field}.sequence`),
+    type,
+    startSeconds,
+    endSeconds,
+    locationId: requireNullablePositiveInteger(
+      event.location_id,
+      `${field}.location_id`,
+    ),
+    cartonIds,
+    waypoints,
+  };
+}
+
+function mapBatchAnimationWaypoint(
+  value: unknown,
+  field: string,
+): SimulationBatchAnimationWaypoint {
+  const waypoint = requireRecord(value, field);
+  return {
+    sequence: requirePositiveInteger(
+      waypoint.sequence,
+      `${field}.sequence`,
+    ),
+    nodeId: requireString(waypoint.node_id, `${field}.node_id`),
+    xM: requireNumber(waypoint.x_m, `${field}.x_m`),
+    yM: requireNumber(waypoint.y_m, `${field}.y_m`),
+    zM: requireNonNegativeNumber(waypoint.z_m, `${field}.z_m`),
+    cumulativeDistanceM: requireNonNegativeNumber(
+      waypoint.cumulative_distance_m,
+      `${field}.cumulative_distance_m`,
+    ),
+    elapsedSeconds: requireNonNegativeNumber(
+      waypoint.elapsed_seconds,
+      `${field}.elapsed_seconds`,
+    ),
+  };
+}
+
+function validateAnimationEvents(
+  events: readonly SimulationBatchAnimationEvent[],
+): void {
+  let previousEndSeconds = 0;
+  for (const [index, event] of events.entries()) {
+    if (event.sequence !== index + 1) {
+      throw new ApiContractError(
+        `events[${index}].sequence must follow event order.`,
+      );
+    }
+    if (event.startSeconds < previousEndSeconds) {
+      throw new ApiContractError(
+        `events[${index}].start_seconds overlaps the previous event.`,
+      );
+    }
+    previousEndSeconds = event.endSeconds;
+  }
+}
+
+function validateAnimationWaypoints(
+  waypoints: readonly SimulationBatchAnimationWaypoint[],
+  eventField: string,
+): void {
+  let previousDistance = 0;
+  let previousElapsedSeconds = 0;
+  for (const [index, waypoint] of waypoints.entries()) {
+    if (waypoint.sequence !== index + 1) {
+      throw new ApiContractError(
+        `${eventField}.waypoints[${index}].sequence must follow waypoint order.`,
+      );
+    }
+    if (waypoint.cumulativeDistanceM < previousDistance) {
+      throw new ApiContractError(
+        `${eventField}.waypoints[${index}].cumulative_distance_m must be ordered.`,
+      );
+    }
+    if (waypoint.elapsedSeconds < previousElapsedSeconds) {
+      throw new ApiContractError(
+        `${eventField}.waypoints[${index}].elapsed_seconds must be ordered.`,
+      );
+    }
+    previousDistance = waypoint.cumulativeDistanceM;
+    previousElapsedSeconds = waypoint.elapsedSeconds;
+  }
+}
+
 function mapPathPoint(value: unknown, field: string): SimulationPathPoint {
   const point = requireRecord(value, field);
   return {
@@ -941,6 +1129,22 @@ function requireMoveBatchStopType(
   field: string,
 ): SimulationMoveBatchStopType {
   if (value !== "pickup" && value !== "dropoff") {
+    throw new ApiContractError(`${field} has an unsupported value.`);
+  }
+  return value;
+}
+
+function requireBatchAnimationEventType(
+  value: unknown,
+  field: string,
+): SimulationBatchAnimationEventType {
+  if (
+    value !== "travel"
+    && value !== "pickup"
+    && value !== "dropoff"
+    && value !== "staging_pickup"
+    && value !== "staging_dropoff"
+  ) {
     throw new ApiContractError(`${field} has an unsupported value.`);
   }
   return value;
